@@ -63,6 +63,8 @@ typedef struct
     int check_interval_minutes;
     time_t start_time;
     int running;
+	char config_file_path[1024];  // :配置文件路径  
+    time_t config_mtime;         // 配置文件最后修改时间 
 } uptime_state_t;
 
 static uptime_state_t g_state = {0};
@@ -699,6 +701,36 @@ static float calculate_uptime(const host_stats_t *host)
     }
 
     return uptime;
+}
+
+// 重新加载配置文件  
+static void reload_config(void) {  
+    if (g_state.config_file_path[0] == '\0') {  
+        return;  // 没有配置文件  
+    }  
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 检测到配置文件变化,开始重新加载\n", timestamp());  
+    }  
+      
+    pthread_mutex_lock(&g_state.lock);  
+      
+    // 保存旧的主机数量  
+    int old_count = g_state.host_count;  
+      
+    // 清空现有配置  
+    g_state.host_count = 0;  
+    memset(g_state.hosts, 0, sizeof(g_state.hosts));  
+      
+    pthread_mutex_unlock(&g_state.lock);  
+      
+    // 重新加载配置文件  
+    load_config(g_state.config_file_path);  
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 配置重载完成: 旧主机数=%d, 新主机数=%d\n",  
+                timestamp(), old_count, g_state.host_count);  
+    }  
 }
 
 // 读取配置文件
@@ -1894,6 +1926,22 @@ void *monitor_thread(void *arg)
     {
         round++;
 
+		// 检查配置文件是否被修改  
+        if (g_state.config_file_path[0] != '\0') {  
+            struct stat st;  
+            if (stat(g_state.config_file_path, &st) == 0) {  
+                if (st.st_mtime > g_state.config_mtime) {  
+                        fprintf(stderr, "[%s] [DEBUG]: 配置文件已修改 (旧时间=%ld, 新时间=%ld)重新加载\n",  
+                                timestamp(), g_state.config_mtime, st.st_mtime);  
+                    g_state.config_mtime = st.st_mtime;  
+                    reload_config();  
+                }  
+            } else if (verbose) {  
+                fprintf(stderr, "[%s] [WARN]: 无法访问配置文件: %s\n",  
+                        timestamp(), strerror(errno));  
+            }  
+        }
+
         if (verbose)
         {
             fprintf(stderr, "[%s] [DEBUG]: 开始第 %d 轮检测 (共 %d 个主机)\n",
@@ -2124,6 +2172,7 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[arg_start], "-f") == 0 && arg_start + 1 < argc)
         {
             config_file = argv[arg_start + 1];
+			strncpy(g_state.config_file_path, config_file, sizeof(g_state.config_file_path) - 1);
             arg_start += 2;
             if (verbose)
             {
@@ -2179,12 +2228,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (argc < arg_start + 1)
-    {
-        print_help(argv[0]);
-        return 1;
-    }
-
     // 初始化状态
     pthread_mutex_init(&g_state.lock, NULL);
     g_state.check_interval_minutes = check_interval;
@@ -2213,6 +2256,11 @@ int main(int argc, char *argv[])
     if (config_file)
     {
         load_config(config_file);
+		// 记录初始修改时间  
+    	struct stat st;  
+    	if (stat(config_file, &st) == 0) {  
+        	g_state.config_mtime = st.st_mtime;  
+    	}	
     }
 
     if (verbose)
