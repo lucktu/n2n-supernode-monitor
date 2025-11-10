@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <syslog.h> 
 
 #define N2N_COMMUNITY_SIZE 20
 #define N2N_MAC_SIZE 6
@@ -82,7 +83,7 @@ void *syslog_forwarder_thread(void *arg) {
     openlog("【N2N-monitor】", LOG_PID | LOG_CONS, LOG_DAEMON);  
       
     if (verbose) {  
-        syslog(LOG_INFO, "【N2N-monitor】syslog 日志输出已启动");  
+        syslog(LOG_INFO, "syslog 日志输出已启动");  
     }  
       
     while (g_syslog_running && (n = read(g_syslog_pipe[0], buffer, sizeof(buffer) - 1)) > 0) {  
@@ -98,8 +99,8 @@ void *syslog_forwarder_thread(void *arg) {
             priority = LOG_DEBUG;  
         }  
           
-        // 写入 syslog,添加标题  
-        syslog(priority, "【N2N-monitor】%s", buffer);  
+        // 写入 syslog 系统日志
+        syslog(priority, "%s", buffer);  
     }  
       
     closelog();  
