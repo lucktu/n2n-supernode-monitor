@@ -26,6 +26,8 @@
 #define MAX_HISTORY 300 // 保存300次检测记录
 #define STATE_DIR "/tmp/n2n_monitor"
 
+time_t last_manual_refresh = 0;  // 记录上次手动刷新时间  
+int manual_refresh_interval = 1; // 默认1分钟间隔
 static int verbose = 0;
 static char g_community[N2N_COMMUNITY_SIZE] = "N2N_check_bot";
 static uint8_t g_mac[N2N_MAC_SIZE] = {0xa1, 0xb2, 0xc3, 0xd4, 0xf5, 0x06}; // a1:b2:c3:d4:f5:06
@@ -40,9 +42,10 @@ typedef struct
 // 统计数据结构
 typedef struct
 {
-    char host[256];
+    char host[256];  // 实际主机名/IP
     int port;
     char note[2048]; // 备注
+    char display_name[256];      // 新增:前端显示主机名
     int total_checks;
     int success_v1;
     int success_v2;
@@ -704,97 +707,124 @@ static float calculate_uptime(const host_stats_t *host)
 }
 
 // 读取配置文件
-static void load_config(const char *config_file)
-{
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 开始读取配置文件: %s\n", timestamp(), config_file);
-    }
-    FILE *f = fopen(config_file, "r");
-    if (!f)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 配置文件打开失败: %s\n", timestamp(), config_file);
-        return;
-    }
-
-    char line[1024];
-    int line_num = 0;
-    while (fgets(line, sizeof(line), f) && g_state.host_count < MAX_HOSTS)
-    {
-        line_num++;
-        // 跳过注释和空行
-        if (line[0] == '#' || line[0] == '\n')
-        {
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [DEBUG]: 跳过第 %d 行 (注释或空行)\n", timestamp(), line_num);
-            }
-            continue;
-        }
-
-        char host[256] = {0};
-        int port = 10086;
-        char note[512] = {0};
-
-        // 格式: host:port|note 或 host:port
-        char *pipe = strchr(line, '|');
-        if (pipe)
-        {
-            *pipe = '\0';
-            strncpy(note, pipe + 1, sizeof(note) - 1);
-            // 移除换行符
-            char *newline = strchr(note, '\n');
-            if (newline)
-                *newline = '\0';
-        }
-
-        char *colon = strchr(line, ':');
-        if (colon)
-        {
-            *colon = '\0';
-            port = atoi(colon + 1);
-        }
-        strncpy(host, line, sizeof(host) - 1);
-
-		// 检查是否重复  
-        int is_duplicate = 0;  
-        for (int j = 0; j < g_state.host_count; j++)  
+static void load_config(const char *config_file)  
+{  
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 开始读取配置文件: %s\n", timestamp(), config_file);  
+    }  
+    FILE *f = fopen(config_file, "r");  
+    if (!f)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 配置文件打开失败: %s\n", timestamp(), config_file);  
+        return;  
+    }  
+  
+    char line[1024];  
+    int line_num = 0;  
+    while (fgets(line, sizeof(line), f) && g_state.host_count < MAX_HOSTS)  
+    {  
+        line_num++;  
+          
+        // 去除行首空格    
+        char *trimmed_line = line;    
+        while (*trimmed_line == ' ' || *trimmed_line == '\t') {    
+            trimmed_line++;    
+        }  
+          
+        // 跳过注释和空行 - 使用 trimmed_line  
+        if (trimmed_line[0] == '#' || trimmed_line[0] == '\n')  
         {  
-            if (strcmp(g_state.hosts[j].host, host) == 0 &&   
-                g_state.hosts[j].port == port)  
+            if (verbose)  
             {  
-                is_duplicate = 1;  
-                fprintf(stderr, "[%s] [WARN]: 忽略重复的主机 (第 %d 行): %s:%d\n",   
-                        timestamp(), line_num, host, port);  
-                break;  
+                fprintf(stderr, "[%s] [DEBUG]: 跳过第 %d 行 (注释或空行)\n", timestamp(), line_num);  
             }  
+            continue;  
         }  
   
-        if (is_duplicate)  
+        char host[256] = {0};  
+        int port = 10086;  
+        char note[512] = {0};  
+        char display_name[256] = {0};  
+  
+        // 格式: host:port|备注|前端显示主机名  
+        char *first_pipe = strchr(trimmed_line, '|');    
+        if (first_pipe)    
+        {    
+            *first_pipe = '\0';    
+            char *second_pipe = strchr(first_pipe + 1, '|');    
+            if (second_pipe)    
+            {    
+                *second_pipe = '\0';    
+                strncpy(note, first_pipe + 1, sizeof(note) - 1);    
+                strncpy(display_name, second_pipe + 1, sizeof(display_name) - 1);    
+                char *newline = strchr(display_name, '\n');    
+                if (newline)    
+                    *newline = '\0';    
+            }    
+            else    
+            {    
+                strncpy(note, first_pipe + 1, sizeof(note) - 1);    
+                char *newline = strchr(note, '\n');    
+                if (newline)    
+                    *newline = '\0';    
+            }    
+        }  
+  
+        // 解析端口  
+        char *colon = strchr(trimmed_line, ':');  
+        if (colon)  
         {  
-            continue;  // 跳过这个重复的主机  
-        }
-
-        host_stats_t *h = &g_state.hosts[g_state.host_count];
-        strncpy(h->host, host, sizeof(h->host) - 1);
-        h->port = port;
-        strncpy(h->note, note, sizeof(h->note) - 1);
-        if (verbose)
-        {
-            fprintf(stderr, "[%s] [DEBUG]: 第 %d 行解析成功: host=%s, port=%d, note=%s\n",
-                    timestamp(), line_num, host, port, note[0] ? note : "(无)");
-        }
-
-        load_history(h);
-        g_state.host_count++;
-    }
-
-    fclose(f);
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 配置文件读取完成,共加载 %d 个主机\n",
-                timestamp(), g_state.host_count);
-    }
+            *colon = '\0';  
+            port = atoi(colon + 1);  
+        }  
+          
+        // 复制主机名  
+        strncpy(host, trimmed_line, sizeof(host) - 1);  
+  
+        // 检查是否重复    
+        int is_duplicate = 0;    
+        for (int j = 0; j < g_state.host_count; j++)    
+        {    
+            if (strcmp(g_state.hosts[j].host, host) == 0 &&     
+                g_state.hosts[j].port == port)    
+            {    
+                is_duplicate = 1;    
+                fprintf(stderr, "[%s] [WARN]: 忽略重复的主机 (第 %d 行): %s:%d\n",     
+                        timestamp(), line_num, host, port);    
+                break;    
+            }    
+        }    
+    
+        if (is_duplicate)    
+        {    
+            continue;  
+        }  
+  
+        host_stats_t *h = &g_state.hosts[g_state.host_count];  
+        strncpy(h->host, host, sizeof(h->host) - 1);  
+        h->port = port;  
+        strncpy(h->note, note, sizeof(h->note) - 1);  
+        strncpy(h->display_name, display_name, sizeof(h->display_name) - 1);  
+          
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [DEBUG]: 第 %d 行解析成功: host=%s, port=%d, note=%s, display_name=%s\n",  
+                    timestamp(), line_num, host, port,   
+                    note[0] ? note : "(无)",  
+                    display_name[0] ? display_name : "(无)");  
+        }  
+  
+        load_history(h);  
+        g_state.host_count++;  
+    }  
+  
+    fclose(f);  
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 配置文件读取完成,共加载 %d 个主机\n",  
+                timestamp(), g_state.host_count);  
+    }  
 }
 
 // 重新加载配置文件  
@@ -1280,6 +1310,34 @@ void generate_html(char *buf, size_t bufsize)
                        "    }, 3000);  // 5次闪烁 × 0.6秒 = 3秒\n"
                        "  }, 500);  // 等待滚动完成\n"
                        "}\n"
+                       "function manualRefresh() { \n" 
+                       "var btn = document.getElementById('refreshBtn');\n"  
+                       "btn.disabled = true; \n" 
+                       "btn.style.opacity = '0.6';\n"  
+                       "btn.style.transform = 'scale(0.95)';\n"  
+                       "btn.textContent = '检测中...';\n"  
+                       "fetch('/refresh')\n"  
+                       ".then(response => response.json())\n"  
+                       ".then(data => {\n"  
+                       "if (data.success) {\n"  
+                       "showToast('检测成功', true);\n"  
+                       "setTimeout(() => location.reload(), 1000);\n"  
+                       "} else {\n"  
+                       "showToast(data.message, false);\n"  
+                       "btn.disabled = false;\n"  
+                       "btn.style.opacity = '1';\n"  
+                       "btn.style.transform = 'scale(1)';\n"  
+                       "btn.textContent = '立即检测';\n"  
+                       "}\n"  
+                       "})\n"  
+                       ".catch(err => {\n"  
+                       "showToast('检测失败,请稍后重试', false);\n"  
+                       "btn.disabled = false;\n"  
+                       "btn.style.opacity = '1';\n"
+                       "btn.style.transform = 'scale(1)';\n"
+                       "btn.textContent = '立即检测';\n"
+                       "});\n"
+                       "}\n"
                        "document.addEventListener('keydown', function(e) {\n"
                        "  if (e.key === 'Escape') closeHistoryModal();\n"
                        "});\n"
@@ -1323,6 +1381,10 @@ void generate_html(char *buf, size_t bufsize)
                        "<h3>最后检测</h3>\n"
                        "<p>%s</p>\n"
                        "</div>\n"
+                       "<button id='refreshBtn' onclick='manualRefresh()'\n"
+                       "style='padding:8px 16px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));\n"
+                       "color:white;border:none;cursor:pointer;font-weight:600;transition:all 0.3s;'> \n"
+                       "立即检测</button>\n"
                        "</div>\n" // 关闭左侧容器
                        "<div class='filter-section'>\n"
                        "<label>版本筛选:</label>\n"
@@ -1458,6 +1520,7 @@ void generate_html(char *buf, size_t bufsize)
         snprintf(gradient_bg, sizeof(gradient_bg),
                  "background:linear-gradient(90deg, hsl(%d, 90%%, 50%%), hsl(%d, 90%%, 40%%))",
                  hue, hue);
+        const char *display = h->display_name[0] ? h->display_name : h->host;
 
         len += snprintf(buf + len, bufsize - len,
                         "<tr id='host-%s-%d'>"
@@ -1478,17 +1541,17 @@ void generate_html(char *buf, size_t bufsize)
                         "<td>%s</td>"
                         "</tr>\n",
                         safe_host_id, h->port,
-                        h->host, h->port, h->host,
+                        display, h->port, display,
                         h->port,
                         version_badges,
                         history_data,
-                        h->host, h->port, history_data,
+                        display, h->port, history_data,
                         overall_rate_int, // 背景层宽度
                         gradient_bg,      // 动态渐变背景
                         overall_rate_int, // 文字显示
                         status_class, status_text,
                         last_check_str,
-                        h->note[0] ? h->note : "-");
+                        h->note[0] ? h->note : "✍️");
     }
 
     // 关闭 tbody、table 与页面结构（保留原结构，仅样式与脚本已现代化）
@@ -1817,36 +1880,89 @@ void handle_api_request(int client_sock, const char *path) {
         fprintf(stderr, "[%s] [DEBUG]: API请求解析到 supernode 参数: %s\n", timestamp(), supernode);  
     }
      
-    // 验证格式: host:port  
-    char host[256];  
-    int port;  
-    if (sscanf(supernode, "%255[^:]:%d", host, &port) != 2 ||   
-        port <= 0 || port > 65535) { 
-        if (verbose) {  
-            fprintf(stderr, "[%s] [DEBUG]: API请求 supernode 参数值格式错误: %s\n", timestamp(), supernode);  
-        } 
-        send_error_response(client_sock, "格式错误,正确格式: host:port");  
-        return;  
+    // 尝试分离端口号  
+    char query_name[256] = {0};  
+    int user_port = 0;  // 用户提供的端口  
+    char *colon = strchr(supernode, ':');  
+    if (colon) {  
+        // 有冒号,提取冒号前的部分作为查询名称  
+        size_t name_len = colon - supernode;  
+        if (name_len < sizeof(query_name)) {  
+            strncpy(query_name, supernode, name_len);  
+            query_name[name_len] = '\0';  
+        }  
+        // 解析用户提供的端口  
+        user_port = atoi(colon + 1);  
+    } else {  
+        // 无冒号,整个字符串作为查询名称  
+        strncpy(query_name, supernode, sizeof(query_name) - 1);  
     }  
+      
+    // 尝试匹配前端显示名称  
+    char actual_host[256] = {0};  
+    int actual_port = 0;  
+    int found = 0;  
+      
+    pthread_mutex_lock(&g_state.lock);  
+    for (int i = 0; i < g_state.host_count; i++) {  
+        if (g_state.hosts[i].display_name[0] &&   
+            strcmp(g_state.hosts[i].display_name, query_name) == 0) {  
+            strncpy(actual_host, g_state.hosts[i].host, sizeof(actual_host) - 1);  
+            // 关键修改: 如果用户提供了端口,使用用户端口;否则使用配置文件端口  
+            if (user_port > 0 && user_port <= 65535) {  
+                actual_port = user_port;  
+                if (verbose) {  
+                    fprintf(stderr, "[%s] [DEBUG]: API请求匹配到前端显示名称 '%s' -> %s:%d (使用用户提供的端口)\n",  
+                            timestamp(), query_name, actual_host, actual_port);  
+                }  
+            } else {  
+                actual_port = g_state.hosts[i].port;  
+                if (verbose) {  
+                    fprintf(stderr, "[%s] [DEBUG]: API请求匹配到前端显示名称 '%s' -> %s:%d (使用配置文件端口)\n",  
+                            timestamp(), query_name, actual_host, actual_port);  
+                }  
+            }  
+            found = 1;  
+            break;  
+        }  
+    }  
+    pthread_mutex_unlock(&g_state.lock);  
+      
+    // 如果未找到匹配的前端显示名称,按原格式解析 host:port  
+    if (!found) {  
+        if (sscanf(supernode, "%255[^:]:%d", actual_host, &actual_port) != 2 ||  
+            actual_port <= 0 || actual_port > 65535) {  
+            if (verbose) {  
+                fprintf(stderr, "[%s] [DEBUG]: API请求 supernode 参数值格式错误: %s\n",   
+                        timestamp(), supernode);  
+            }  
+            send_error_response(client_sock, "格式错误,正确格式: host:port 或前端显示主机名[:port]");  
+            return;  
+        }  
+        if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: API请求解析为 host:port 格式: %s:%d\n",  
+                    timestamp(), actual_host, actual_port);  
+        }  
+    } 
       
     // 执行检测  
     int v1_ok = 0, v2_ok = 0, v2s_ok = 0, v3_ok = 0;  
-    int result = test_supernode_internal(host, port, &v1_ok, &v2_ok, &v2s_ok, &v3_ok); 
+    int result = test_supernode_internal(actual_host, actual_port, &v1_ok, &v2_ok, &v2s_ok, &v3_ok); 
     
     if (verbose) {  
         fprintf(stderr, "[%s] [DEBUG]: API请求 %s:%d 检测结果: result=%d, v1=%d, v2=%d, v2s=%d, v3=%d\n",  
-                timestamp(), host, port, result, v1_ok, v2_ok, v2s_ok, v3_ok);  
+                timestamp(), actual_host, actual_port, result, v1_ok, v2_ok, v2s_ok, v3_ok);  
     } 
       
     // 检查历史记录  
     float uptime = -1.0f;  
     pthread_mutex_lock(&g_state.lock);  
     for (int i = 0; i < g_state.host_count; i++) {  
-        if (strcmp(g_state.hosts[i].host, host) == 0 &&   
-            g_state.hosts[i].port == port) {  
+        if (strcmp(g_state.hosts[i].host, actual_host) == 0 &&   
+            g_state.hosts[i].port == actual_port) {  
             uptime = calculate_uptime(&g_state.hosts[i]);
             if (verbose) {  
-                fprintf(stderr, "[%s] [DEBUG]: API请求 %s:%d 找到历史记录: uptime=%.2f%%\n", timestamp(), host, port, uptime);  
+                fprintf(stderr, "[%s] [DEBUG]: API请求 %s:%d 找到历史记录: uptime=%.2f%%\n", timestamp(), actual_host, actual_port, uptime);  
             }  
             break;  
         }  
@@ -1856,6 +1972,79 @@ void handle_api_request(int client_sock, const char *path) {
     // 生成 SVG 响应  
     generate_svg_response(client_sock, result == 0, uptime, v1_ok, v2_ok, v2s_ok, v3_ok);  
 }
+
+void handle_refresh_request(int client_sock) {      
+    time_t now = time(NULL);      
+    pthread_mutex_lock(&g_state.lock);      
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 收到刷新请求 - now=%ld, last_manual_refresh=%ld, 间隔=%d秒, 差值=%ld秒\n",  
+                timestamp(), now, last_manual_refresh, manual_refresh_interval * 60, now - last_manual_refresh);  
+    }  
+          
+    if (now - last_manual_refresh < manual_refresh_interval * 60) {      
+        pthread_mutex_unlock(&g_state.lock);      
+          
+        if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: 刷新间隔未到,拒绝请求\n", timestamp());  
+        }  
+          
+        char response[512];      
+        int len = snprintf(response, sizeof(response),      
+            "HTTP/1.1 200 OK\r\n"      
+            "Content-Type: application/json; charset=utf-8\r\n"      
+            "Connection: close\r\n\r\n"      
+            "{\"success\":false,\"message\":\"哎呀，才刚刚检测过呢,等等再试哦~\"}");      
+        send(client_sock, response, len, 0);      
+        close(client_sock);      
+        return;      
+    }      
+          
+    last_manual_refresh = now;  
+    pthread_mutex_unlock(&g_state.lock);  
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 开始执行刷新,检测 %d 个主机\n", timestamp(), g_state.host_count);  
+    }  
+          
+    // 执行检测逻辑  
+    for (int i = 0; i < g_state.host_count; i++) {      
+        host_stats_t *h = &g_state.hosts[i];      
+        int v1_ok = 0, v2_ok = 0, v2s_ok = 0, v3_ok = 0;      
+        
+        test_supernode_internal(h->host, h->port, &v1_ok, &v2_ok, &v2s_ok, &v3_ok);      
+              
+        pthread_mutex_lock(&g_state.lock);      
+        h->total_checks++;      
+        if (v1_ok) h->success_v1++;      
+        if (v2_ok) h->success_v2++;      
+        if (v2s_ok) h->success_v2s++;      
+        if (v3_ok) h->success_v3++;      
+        h->last_check = time(NULL);      
+              
+        int is_online = (v1_ok || v2_ok || v2s_ok || v3_ok);      
+        add_check_record(h, is_online);      
+        snprintf(h->last_status, sizeof(h->last_status),       
+                 is_online ? "✓ 在线" : "✗ 离线");      
+        save_history(h);  // 确保数据已保存  
+        pthread_mutex_unlock(&g_state.lock);      
+    }      
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 刷新完成,发送成功响应\n", timestamp());  
+    }  
+      
+    // 所有检测完成后才发送响应  
+    char response[512];      
+    int len = snprintf(response, sizeof(response),      
+        "HTTP/1.1 200 OK\r\n"      
+        "Content-Type: application/json; charset=utf-8\r\n"      
+        "Connection: close\r\n\r\n"      
+        "{\"success\":true,\"message\":\"刷新成功\"}");      
+    send(client_sock, response, len, 0);      
+    close(client_sock);      
+}
+
 // HTTP 请求处理
 void handle_http_request(int client_sock)  
 {  
@@ -1887,7 +2076,15 @@ void handle_http_request(int client_sock)
                 }  
                 handle_api_request(client_sock, path);    
                 return;    
-            }  
+            }
+            
+            if (strncmp(path, "/refresh", 8) == 0) { 
+            	if (verbose) {  
+                    fprintf(stderr, "[%s] [DEBUG]: 识别为 立即刷新 请求，转发到 handle_refresh_request()\n", timestamp());  
+                }  
+    		handle_refresh_request(client_sock);  
+    		return;  
+	    }  
               
             if (verbose) {  
                 fprintf(stderr, "[%s] [DEBUG]: 识别为主页请求，生成 HTML 响应\n", timestamp());  
@@ -1950,10 +2147,21 @@ void *monitor_thread(void *arg)
             struct stat st;  
             if (stat(g_state.config_file_path, &st) == 0) {  
                 if (st.st_mtime > g_state.config_mtime) {  
-                        fprintf(stderr, "[%s] [DEBUG]: 配置文件已修改 (旧时间=%ld, 新时间=%ld)重新加载\n",  
-                                timestamp(), g_state.config_mtime, st.st_mtime);  
-                    g_state.config_mtime = st.st_mtime;  
-                    reload_config();  
+                   	// 转换旧时间  
+    			struct tm *old_tm = localtime(&g_state.config_mtime);  
+    			char old_time_str[64];  
+    			strftime(old_time_str, sizeof(old_time_str), "%Y年%m月%d日 %H时%M分%S秒", old_tm);  
+      
+    			// 转换新时间  
+    			struct tm *new_tm = localtime(&st.st_mtime);  
+    			char new_time_str[64];  
+    			strftime(new_time_str, sizeof(new_time_str), "%Y年%m月%d日 %H时%M分%S秒", new_tm);  
+      
+    			fprintf(stderr, "[%s] [DEBUG]: 配置文件已修改 (上次是%s, 当前为%s)重新加载\n",  
+            			timestamp(), old_time_str, new_time_str);  
+      
+    			g_state.config_mtime = st.st_mtime;  
+    			reload_config();  
                 }  
             } else if (verbose) {  
                 fprintf(stderr, "[%s] [WARN]: 无法访问配置文件: %s\n",  
@@ -2122,7 +2330,8 @@ static void print_help(const char *prog_name)
     printf("用法: %s [选项] <主机1:端口1> [主机2:端口2] ...\n\n", prog_name);
     printf("选项:\n");
     printf("  -p <端口>       服务主页监听端口 (默认: 8585)\n");
-    printf("  -i <分钟>       指定探测间隔时间（分钟）(默认: 1)\n");
+    printf("  -i <分钟>       指定自动探测间隔时间（分钟）(默认: 1)\n");
+    printf("  -r <分钟>       指定主页手动刷新探测间隔时间（分钟）(默认: 1)\n");
     printf("  -f <文件>       从配置文件读取主机列表(支持备注)\n");
     printf("  -c <社区名>     指定探测使用的社区名称 (默认: N2N_check_bot)\n");
     printf("  -m <MAC地址>    指定探测使用的MAC地址,格式: a1:b2:c3:d4:f5:g6 (默认: a1:b2:c3:d4:f5:06)\n");
@@ -2131,8 +2340,8 @@ static void print_help(const char *prog_name)
     printf("  -v              详细模式（显示调试信息）\n");
     printf("  -h              显示此帮助信息\n");
     printf("配置文件格式:\n");
-    printf("  host:port|备注\n");
-    printf("  例如: n2n.example.com:10086|北京电信\n\n");
+    printf("  host:port|备注|主页展示的主机名\n");
+    printf("  例如: n2n.example.com:10086|北京电信|隐私.com\n\n");
     printf("命令示例:\n");
     printf("  %s -p 8080 -i 2 n2n.example.com:10086 192.168.1.1:10090\n", prog_name);
     printf("  %s -v -6 \"supernode.example.com:7777|北京电信\" \"192.168.1.1:10090|自建\"\n", prog_name);
@@ -2184,6 +2393,16 @@ int main(int argc, char *argv[])
             if (check_interval <= 0)
             {
                 fprintf(stderr, "[%s] [ERROR]: 无效的检测间隔 %d\n", timestamp(), check_interval);
+                return 1;
+            }
+            arg_start += 2;
+        }
+        else if (strcmp(argv[arg_start], "-r") == 0 && arg_start + 1 < argc)
+        {
+            manual_refresh_interval = atoi(argv[arg_start + 1]);
+            if (manual_refresh_interval <= 0)
+            {
+                fprintf(stderr, "[%s] [ERROR]: 无效的刷新间隔 %d\n", timestamp(), manual_refresh_interval);
                 return 1;
             }
             arg_start += 2;
@@ -2300,14 +2519,27 @@ int main(int argc, char *argv[])
         char host[256] = {0};
         int port = 10086;
         char note[512] = {0};
+        char display_name[256] = {0};  // 新增: 前端显示主机名
 
-        // 解析备注 (格式: host:port|备注)
-        char *pipe = strchr(host_str, '|');
-        if (pipe)
-        {
-            *pipe = '\0';
-            strncpy(note, pipe + 1, sizeof(note) - 1);
-        }
+        // 解析格式: host:port|备注|前端显示主机名 或 host:port|备注 或 host:port  
+    	char *first_pipe = strchr(host_str, '|');  
+    	if (first_pipe)  
+    	{  
+        	*first_pipe = '\0';  
+        	char *second_pipe = strchr(first_pipe + 1, '|');  
+        	if (second_pipe)  
+        	{  
+            		// 三段式格式: host:port|备注|前端显示主机名  
+            		*second_pipe = '\0';  
+            		strncpy(note, first_pipe + 1, sizeof(note) - 1);  
+            		strncpy(display_name, second_pipe + 1, sizeof(display_name) - 1);  
+        	}  
+        	else  
+        	{  
+            		// 兼容旧格式: host:port|备注  
+            		strncpy(note, first_pipe + 1, sizeof(note) - 1);  
+        	}  
+    	}
         // 解析端口
         char *port_str = strchr(host_str, ':');
         if (port_str)
@@ -2348,6 +2580,7 @@ int main(int argc, char *argv[])
         strncpy(h->host, host_str, sizeof(h->host) - 1);
         h->port = port;
         strncpy(h->note, note, sizeof(h->note) - 1);
+        strncpy(h->display_name, display_name, sizeof(h->display_name) - 1);
         load_history(h);
         g_state.host_count++;
 
