@@ -668,7 +668,7 @@ static void add_check_record(host_stats_t *host, int success)
     }
 }
 
-// 计算连通率(最近60次)
+// 计算连通率
 static float calculate_uptime(const host_stats_t *host)
 {
     if (host->history_count == 0)
@@ -1447,7 +1447,7 @@ void generate_html(char *buf, size_t bufsize)
                     "</div>\n"
                     "\n"
                     "<div class='footer'>\n"  
-                    "© 2025 N2N Supernode Monitor · <a href='http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=GLULTq6IK_44qF_CAOSc4PqVLE_LMA6Y&authKey=KQ4hIgPoUa25xQF%2FtFCNi%2BuF31wob9vISoCpoOainpJ%2Beo1AxRi%2FZWmIImJbIZoH&noverify=0&group_code=196588661' target='_blank' rel='noopener noreferrer'>加入QQ群</a>\n"   
+                    "© 2025 N2N Supernode Monitor · <a href='http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=GLULTq6IK_44qF_CAOSc4PqVLE_LMA6Y&authKey=KQ4hIgPoUa25xQF%%2FtFCNi%%2BuF31wob9vISoCpoOainpJ%%2Beo1AxRi%%2FZWmIImJbIZoH&noverify=0&group_code=196588661' target='_blank' rel='noopener noreferrer'>加入QQ群</a>\n"   
                     "</div>\n"  
                     "\n"
                     "</div>\n"
@@ -1502,63 +1502,274 @@ static void save_history(const host_stats_t *host)
     }
 }
 
+void generate_svg_response(int client_sock, int is_online, float uptime) {
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 开始生成 SVG 响应 (is_online=%d, uptime=%.2f%%)\n",   
+                timestamp(), is_online, uptime);  
+    }      
+    char svg[4096];      
+    int len = 0;      
+          
+    // HTTP 头      
+    len += snprintf(svg + len, sizeof(svg) - len,      
+        "HTTP/1.1 200 OK\r\n"      
+        "Content-Type: image/svg+xml; charset=utf-8\r\n"      
+        "Connection: close\r\n\r\n");      
+      
+    // 计算文字宽度（近似值）  
+    const char *status_text = is_online ? "在线" : "离线";  
+    int status_label_width = 32;  // "状态" 两个字  
+    int status_value_width = 22;  // "在线"/"离线" 两个字  
+    int uptime_label_width = 44;  // "连通率" 三个字  
+    int uptime_value_width = uptime >= 100 ? 33 : (uptime >= 10 ? 28 : 23);  
+      
+    int status_total = status_label_width + status_value_width + 16;  
+    int uptime_total = uptime >= 0 ? (uptime_label_width + uptime_value_width + 16) : 0;  
+    int total_width = status_total + uptime_total;  
+      
+    // SVG 内容      
+    len += snprintf(svg + len, sizeof(svg) - len,      
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"20\">\n",      
+        total_width);      
+          
+    // 状态徽章 - 左侧部分（左边圆角，右边直角）  
+    const char *status_color = is_online ? "#4ade80" : "#ef4444"; 
+    
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 状态徽章颜色: %s (状态文字: %s)\n",  
+                timestamp(), status_color, status_text);  
+    } 
+      
+    len += snprintf(svg + len, sizeof(svg) - len,  
+        "  <path d=\"M 3 0 L %d 0 L %d 20 L 3 20 Q 0 20 0 17 L 0 3 Q 0 0 3 0 Z\" fill=\"#555\"/>\n",  
+        status_label_width + 8, status_label_width + 8);  
+      
+    // 状态徽章 - 右侧部分（左边直角，右边圆角）  
+    int status_right = status_total - 3;  
+    len += snprintf(svg + len, sizeof(svg) - len,  
+        "  <path d=\"M %d 0 L %d 0 Q %d 0 %d 3 L %d 17 Q %d 20 %d 20 L %d 20 L %d 0 Z\" fill=\"%s\"/>\n",  
+        status_label_width + 8, status_right, status_total, status_total,   
+        status_total, status_total, status_right, status_label_width + 8, status_label_width + 8,  
+        status_color);  
+      
+    // 状态徽章文字 - 修正居中位置  
+    int status_label_center = (status_label_width + 8) / 2;  // 左侧矩形中心  
+    int status_value_center = status_label_width + 8 + (status_total - status_label_width - 8) / 2;  // 右侧矩形中心  
+      
+    len += snprintf(svg + len, sizeof(svg) - len,      
+        "  <text x=\"%d\" y=\"14\" fill=\"#fff\" font-size=\"11\" text-anchor=\"middle\">状态</text>\n"      
+        "  <text x=\"%d\" y=\"14\" fill=\"#fff\" font-size=\"11\" text-anchor=\"middle\">%s</text>\n",      
+        status_label_center,  
+        status_value_center,  
+        status_text);      
+          
+    // 连通率徽章(如果有历史记录)  
+    if (uptime >= 0) {    
+        // 使用与主页相同的动态颜色计算公式  
+        int hue = 10 + (int)(uptime * 0.8);  
+        char uptime_color[32];    
+        snprintf(uptime_color, sizeof(uptime_color), "hsl(%d, 90%%, 50%%)", hue);  
+        
+        if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: 连通率徽章: uptime=%.2f%%, hue=%d, color=%s\n",  
+                    timestamp(), uptime, hue, uptime_color);  
+        }  
+          
+        int uptime_start = status_total;  
+        int uptime_mid = uptime_start + uptime_label_width + 8;  
+        int uptime_end = total_width;  
+          
+        // 连通率徽章 - 左侧部分（左边圆角，右边直角）  
+        len += snprintf(svg + len, sizeof(svg) - len,  
+            "  <path d=\"M %d 0 L %d 0 L %d 20 L %d 20 Q %d 20 %d 17 L %d 3 Q %d 0 %d 0 Z\" fill=\"#555\"/>\n",  
+            uptime_start + 3, uptime_mid, uptime_mid, uptime_start + 3,  
+            uptime_start, uptime_start, uptime_start, uptime_start, uptime_start + 3);  
+          
+        // 连通率徽章 - 右侧部分（左边直角，右边圆角）  
+        len += snprintf(svg + len, sizeof(svg) - len,  
+            "  <path d=\"M %d 0 L %d 0 Q %d 0 %d 3 L %d 17 Q %d 20 %d 20 L %d 20 L %d 0 Z\" fill=\"%s\"/>\n",  
+            uptime_mid, uptime_end - 3, uptime_end, uptime_end,  
+            uptime_end, uptime_end, uptime_end - 3, uptime_mid, uptime_mid,  
+            uptime_color);  
+          
+        // 连通率徽章文字 - 修正居中位置  
+        int uptime_label_center = uptime_start + (uptime_mid - uptime_start) / 2;  // 左侧矩形中心  
+        int uptime_value_center = uptime_mid + (uptime_end - uptime_mid) / 2;  // 右侧矩形中心  
+          
+        len += snprintf(svg + len, sizeof(svg) - len,      
+            "  <text x=\"%d\" y=\"14\" fill=\"#fff\" font-size=\"11\" text-anchor=\"middle\">连通率</text>\n"      
+            "  <text x=\"%d\" y=\"14\" fill=\"#fff\" font-size=\"11\" text-anchor=\"middle\">%.0f%%</text>\n",      
+            uptime_label_center,  
+            uptime_value_center,  
+            uptime);      
+    }      
+          
+    len += snprintf(svg + len, sizeof(svg) - len, "</svg>\n");
+    
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: SVG 生成完成，总长度: %d 字节\n", timestamp(), len);  
+    }      
+          
+    send(client_sock, svg, len, 0);      
+    close(client_sock);      
+}
+  
+void send_error_response(int client_sock, const char *message) {  
+    char response[512];  
+    int len = snprintf(response, sizeof(response),  
+        "HTTP/1.1 400 Bad Request\r\n"  
+        "Content-Type: text/plain; charset=utf-8\r\n"  
+        "Connection: close\r\n\r\n"  
+        "%s", message);  
+    send(client_sock, response, len, 0);  
+    close(client_sock);  
+}
+void handle_api_request(int client_sock, const char *path) {  
+    // 提取 supernode 参数  
+    char *query = strchr(path, '?');  
+    if (!query) {  
+        close(client_sock);  
+        return;  
+    }  
+      
+    char supernode[512] = {0};  
+    char *param = strstr(query, "supernode=");  
+    if (!param) {
+    	if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: API请求缺少查询参数\n", timestamp());  
+        }  
+        close(client_sock);  
+        return;  
+    }
+      
+    // 解析参数值  
+    sscanf(param + 10, "%511[^&]", supernode);  
+    if (strlen(supernode) == 0) {  
+    	if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: API请求 supernode 参数为空\n", timestamp());  
+        }
+        close(client_sock);  
+        return;  
+    }  
+       
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: API请求解析到 supernode 参数: %s\n", timestamp(), supernode);  
+    }
+     
+    // 验证格式: host:port  
+    char host[256];  
+    int port;  
+    if (sscanf(supernode, "%255[^:]:%d", host, &port) != 2 ||   
+        port <= 0 || port > 65535) { 
+        if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: API请求 supernode 参数值格式错误: %s\n", timestamp(), supernode);  
+        } 
+        send_error_response(client_sock, "格式错误,正确格式: host:port");  
+        return;  
+    }  
+      
+    // 执行检测  
+    int v1_ok = 0, v2_ok = 0, v2s_ok = 0, v3_ok = 0;  
+    int result = test_supernode_internal(host, port, &v1_ok, &v2_ok, &v2s_ok, &v3_ok); 
+    
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: API请求 %s:%d 检测结果: result=%d, v1=%d, v2=%d, v2s=%d, v3=%d\n",  
+                timestamp(), host, port, result, v1_ok, v2_ok, v2s_ok, v3_ok);  
+    } 
+      
+    // 检查历史记录  
+    float uptime = -1.0f;  
+    pthread_mutex_lock(&g_state.lock);  
+    for (int i = 0; i < g_state.host_count; i++) {  
+        if (strcmp(g_state.hosts[i].host, host) == 0 &&   
+            g_state.hosts[i].port == port) {  
+            uptime = calculate_uptime(&g_state.hosts[i]);
+            if (verbose) {  
+                fprintf(stderr, "[%s] [DEBUG]: API请求 %s:%d 找到历史记录: uptime=%.2f%%\n", timestamp(), host, port, uptime);  
+            }  
+            break;  
+        }  
+    }  
+    pthread_mutex_unlock(&g_state.lock);  
+      
+    // 生成 SVG 响应  
+    generate_svg_response(client_sock, result == 0, uptime);  
+}
 // HTTP 请求处理
-void handle_http_request(int client_sock)
-{
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 开始处理 HTTP 请求 (socket fd=%d)\n", timestamp(), client_sock);
-    }
-    char request[1024];
-    ssize_t n = recv(client_sock, request, sizeof(request) - 1, 0);
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 接收到 %zd 字节请求数据\n", timestamp(), n);
-    }
-    if (n > 0)
-    {
-        request[n] = '\0';
-
-        char *response = malloc(262144); // 256KB
-        if (response)
-        {
-            generate_html(response, 262144);
-            size_t response_len = strlen(response);
-            ssize_t sent = send(client_sock, response, response_len, 0);
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [DEBUG]: 发送响应: %zd/%zu 字节\n", timestamp(), sent, response_len);
-            }
-            free(response);
-        }
-        else
-        {
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [ERROR]: 响应缓冲区分配失败\n", timestamp());
-            }
-        }
-    }
-    else if (n == 0)
-    {
-        if (verbose)
-        {
-            fprintf(stderr, "[%s] [DEBUG]: 客户端关闭连接\n", timestamp());
-        }
-    }
-    else
-    {
-        if (verbose)
-        {
-            fprintf(stderr, "[%s] [ERROR]: recv() 错误: %s\n", timestamp(), strerror(errno));
-        }
-    }
-
-    close(client_sock);
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: HTTP 请求处理完成,连接已关闭\n", timestamp());
-    }
+void handle_http_request(int client_sock)  
+{  
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 开始处理 HTTP 请求 (socket fd=%d)\n", timestamp(), client_sock);  
+    }  
+    char request[1024];  
+    ssize_t n = recv(client_sock, request, sizeof(request) - 1, 0);  
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 接收到 %zd 字节请求数据\n", timestamp(), n);  
+    }  
+      
+    if (n > 0) {  
+        request[n] = '\0';  
+          
+        // 解析请求行: GET /api?supernode=host:port HTTP/1.1    
+        char method[16], path[512], version[16];    
+        if (sscanf(request, "%15s %511s %15s", method, path, version) == 3) {  
+            if (verbose) {  
+                fprintf(stderr, "[%s] [DEBUG]: 解析请求: method=%s, path=%s, version=%s\n",  
+                        timestamp(), method, path, version);  
+            }  
+              
+            if (strncmp(path, "/api", 4) == 0) {  
+                if (verbose) {  
+                    fprintf(stderr, "[%s] [DEBUG]: 识别为 API 请求，转发到 handle_api_request()\n", timestamp());  
+                }  
+                handle_api_request(client_sock, path);    
+                return;    
+            }  
+              
+            if (verbose) {  
+                fprintf(stderr, "[%s] [DEBUG]: 识别为主页请求，生成 HTML 响应\n", timestamp());  
+            }  
+        } else {  
+            if (verbose) {  
+                fprintf(stderr, "[%s] [DEBUG]: 请求行解析失败\n", timestamp());  
+            }  
+        }  
+               
+        char *response = malloc(262144);  // 256KB      
+        if (response) {  
+            if (verbose) {  
+                fprintf(stderr, "[%s] [DEBUG]: 开始生成 HTML 内容\n", timestamp());  
+            }  
+              
+            generate_html(response, 262144);      
+            size_t response_len = strlen(response);    
+            ssize_t sent = send(client_sock, response, response_len, 0);  
+              
+            if (verbose) {    
+                fprintf(stderr, "[%s] [DEBUG]: 发送响应: %zd/%zu 字节\n", timestamp(), sent, response_len);    
+            }      
+            free(response);      
+        } else {    
+            if (verbose) {    
+                fprintf(stderr, "[%s] [ERROR]: 响应缓冲区分配失败\n", timestamp());    
+            }    
+        }     
+    } else if (n == 0) {    
+        if (verbose) {    
+            fprintf(stderr, "[%s] [DEBUG]: 客户端关闭连接\n", timestamp());    
+        }    
+    } else {    
+        if (verbose) {    
+            fprintf(stderr, "[%s] [ERROR]: recv() 错误: %s\n", timestamp(), strerror(errno));    
+        }    
+    }     
+          
+    close(client_sock);   
+    if (verbose) {    
+        fprintf(stderr, "[%s] [DEBUG]: HTTP 请求处理完成,连接已关闭\n", timestamp());    
+    }     
 }
 
 // 监控线程
