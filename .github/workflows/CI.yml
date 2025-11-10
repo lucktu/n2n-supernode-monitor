@@ -102,9 +102,9 @@ jobs:
      - name: 编译
        run: |
          make 
-         mkdir -p bin
-         mv n2n_check_cli bin/n2n_check_cli
-         mv n2n_check_http bin/n2n_check_http
+         mkdir -p ${{ matrix.target }}
+         mv n2n_check_cli ${{ matrix.target }}/n2n_check_cli
+         mv n2n_check_http ${{ matrix.target }}/n2n_check_http
        
      - name: 安装 UPX
        if: github.event.inputs.upx == 'true' 
@@ -115,13 +115,13 @@ jobs:
         
      - name: 压缩二进制
        if: github.event.inputs.upx == 'true'
-       run: upx --lzma --best bin/* || true
+       run: upx --lzma --best ${{ matrix.target }}/* || true
        
      - name: 上传产物
        uses: actions/upload-artifact@v4
        with:
         name: n2n-supernode-monitor-${{ matrix.target }}
-        path: bin/*
+        path: ${{ matrix.target }}/*
 
   release:
     needs: build
