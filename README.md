@@ -10,7 +10,8 @@ N2N supernode 检测工具
 
 选项:
   -p <端口>       服务主页监听端口 (默认: 8585)
-  -i <分钟>       指定探测间隔时间（分钟）(默认: 1)
+  -i <分钟>       指定自动探测间隔时间（分钟）(默认: 1)
+  -r <分钟>       指定主页手动刷新探测间隔时间（分钟）(默认: 1)
   -f <文件>       从配置文件读取主机列表(支持备注)
   -c <社区名>     指定探测使用的社区名称 (默认: N2N_check_bot)
   -m <MAC地址>    指定探测使用的MAC地址,格式: a1:b2:c3:d4:f5:g6 (默认: a1:b2:c3:d4:f5:06)
@@ -21,8 +22,8 @@ N2N supernode 检测工具
   -h              显示此帮助信息
 
 配置文件格式:
-  host:port|备注
-  例如: n2n.example.com:10086|北京电信
+  host:port|备注|主页展示的主机名
+  例如: n2n.example.com:10086|北京电信|隐私.com
 
 命令示例:
   ./n2n_check_http -p 8080 -i 2 n2n.example.com:10086 192.168.1.1:10090
@@ -42,7 +43,9 @@ N2N supernode 检测工具
 nohup ./n2n_check_http -p 8585 -i 5 -f /etc/n2n_hosts.conf > /dev/null 2>&1 &
 ```
 
-#### ② systemd 服务：
+#### ② systemd 服务： 
+
+写入 `/etc/systemd/system/n2n-monitor.service`
 
 ```
 [Unit]  
@@ -52,8 +55,8 @@ After=network.target
 [Service]  
 Type=simple  
 ExecStart=/usr/local/bin/n2n_check_http -p 8585 -i 5 -f /etc/n2n_hosts.conf  
-StandardOutput=null  
-StandardError=null  
+StandardOutput=journal    
+StandardError=journal  
 Restart=always  
 RestartSec=10  
   
@@ -62,9 +65,19 @@ WantedBy=multi-user.target
 ```
 
 ```
-sudo systemctl daemon-reload  
-sudo systemctl start n2n-monitor  # 启动
-sudo systemctl enable n2n-monitor  # 开机自启
+sudo systemctl daemon-reload  # 重新加载 systemd 配置
+
+sudo systemctl start n2n-monitor  # 启动服务
+
+sudo systemctl enable n2n-monitor  # 设置开机自启
+ 
+sudo systemctl stop n2n-monitor  # 停止服务 
+  
+sudo systemctl disable n2n-monitor  # 禁用开机自启  
+  
+sudo systemctl status n2n-monitor # 查看服务状态
+ 
+sudo journalctl -u n2n-monitor -f # 查看服务日志 
 ```
 
 ##### 网页嵌套svg图标 ：
