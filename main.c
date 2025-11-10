@@ -2336,9 +2336,9 @@ static void print_help(const char *prog_name)
     printf("  -c <社区名>     指定探测使用的社区名称 (默认: N2N_check_bot)\n");
     printf("  -m <MAC地址>    指定探测使用的MAC地址,格式: a1:b2:c3:d4:f5:g6 (默认: a1:b2:c3:d4:f5:06)\n");
     printf("  -4              仅使用 IPv4 (默认)\n");
-    printf("  -6              同时支持 IPv4 和 IPv6\n\n");
+    printf("  -6              同时支持 IPv4 和 IPv6\n");
     printf("  -v              详细模式（显示调试信息）\n");
-    printf("  -h              显示此帮助信息\n");
+    printf("  -h              显示此帮助信息\n\n");
     printf("配置文件格式:\n");
     printf("  host:port|备注|主页展示的主机名\n");
     printf("  例如: n2n.example.com:10086|北京电信|隐私.com\n\n");
