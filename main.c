@@ -703,36 +703,6 @@ static float calculate_uptime(const host_stats_t *host)
     return uptime;
 }
 
-// 重新加载配置文件  
-static void reload_config(void) {  
-    if (g_state.config_file_path[0] == '\0') {  
-        return;  // 没有配置文件  
-    }  
-      
-    if (verbose) {  
-        fprintf(stderr, "[%s] [DEBUG]: 检测到配置文件变化,开始重新加载\n", timestamp());  
-    }  
-      
-    pthread_mutex_lock(&g_state.lock);  
-      
-    // 保存旧的主机数量  
-    int old_count = g_state.host_count;  
-      
-    // 清空现有配置  
-    g_state.host_count = 0;  
-    memset(g_state.hosts, 0, sizeof(g_state.hosts));  
-      
-    pthread_mutex_unlock(&g_state.lock);  
-      
-    // 重新加载配置文件  
-    load_config(g_state.config_file_path);  
-      
-    if (verbose) {  
-        fprintf(stderr, "[%s] [DEBUG]: 配置重载完成: 旧主机数=%d, 新主机数=%d\n",  
-                timestamp(), old_count, g_state.host_count);  
-    }  
-}
-
 // 读取配置文件
 static void load_config(const char *config_file)
 {
@@ -806,6 +776,36 @@ static void load_config(const char *config_file)
         fprintf(stderr, "[%s] [DEBUG]: 配置文件读取完成,共加载 %d 个主机\n",
                 timestamp(), g_state.host_count);
     }
+}
+
+// 重新加载配置文件  
+static void reload_config(void) {  
+    if (g_state.config_file_path[0] == '\0') {  
+        return;  // 没有配置文件  
+    }  
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 检测到配置文件变化,开始重新加载\n", timestamp());  
+    }  
+      
+    pthread_mutex_lock(&g_state.lock);  
+      
+    // 保存旧的主机数量  
+    int old_count = g_state.host_count;  
+      
+    // 清空现有配置  
+    g_state.host_count = 0;  
+    memset(g_state.hosts, 0, sizeof(g_state.hosts));  
+      
+    pthread_mutex_unlock(&g_state.lock);  
+      
+    // 重新加载配置文件  
+    load_config(g_state.config_file_path);  
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [DEBUG]: 配置重载完成: 旧主机数=%d, 新主机数=%d\n",  
+                timestamp(), old_count, g_state.host_count);  
+    }  
 }
 
 // 生成 HTML 页面
