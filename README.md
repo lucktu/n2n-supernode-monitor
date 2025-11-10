@@ -1,5 +1,7 @@
 # 一个定时检测N2N supernode 可用性的工具
 
+[![问问 AI](https://deepwiki.com/badge.svg)](https://deepwiki.com/lmq8267/n2n-supernode-monitor)
+
 ### UI：
 <img width="1566" height="994" alt="image" src="https://github.com/user-attachments/assets/3a4f5c39-5aea-4b96-90cf-8d786bbaecbe" />
 
