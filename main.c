@@ -3438,6 +3438,37 @@ void handle_refresh_request(int client_sock)
     {
         fprintf(stderr, "[%s] [DEBUG]: 开始执行刷新,检测 %d 个主机\n", timestamp(), g_state.host_count);
     }
+	// 检查配置文件是否被修改
+    if (g_state.config_file_path[0] != '\0')
+    {
+        struct stat st;
+        if (stat(g_state.config_file_path, &st) == 0)
+        {
+            if (st.st_mtime > g_state.config_mtime)
+            {
+                // 转换旧时间
+                struct tm *old_tm = localtime(&g_state.config_mtime);
+                char old_time_str[64];
+                strftime(old_time_str, sizeof(old_time_str), "%Y年%m月%d日 %H时%M分%S秒", old_tm);
+
+                // 转换新时间
+                struct tm *new_tm = localtime(&st.st_mtime);
+                char new_time_str[64];
+                strftime(new_time_str, sizeof(new_time_str), "%Y年%m月%d日 %H时%M分%S秒", new_tm);
+
+                fprintf(stderr, "[%s] [DEBUG]: 配置文件已修改 (上次是%s, 当前为%s)重新加载\n",
+                        timestamp(), old_time_str, new_time_str);
+
+                g_state.config_mtime = st.st_mtime;
+                reload_config();
+            }
+        }
+        else if (verbose)
+        {
+            fprintf(stderr, "[%s] [WARN]: 无法访问配置文件: %s\n",
+                    timestamp(), strerror(errno));
+        }
+    }
 
     // 执行检测逻辑
     for (int i = 0; i < g_state.host_count; i++)
@@ -3597,9 +3628,11 @@ void handle_http_request(int client_sock)
                 strcat(proxy_info, "CF-Connecting-IP=");  
                 strcat(proxy_info, cfip_value);  
             }  
-              
-            // 输出合并后的消息  
-            fprintf(stderr, "[%s] [DEBUG]: %s\n", timestamp(), proxy_info);  
+            if (verbose)
+    		{ 
+            	// 输出合并后的消息  
+            	fprintf(stderr, "[%s] [DEBUG]: %s\n", timestamp(), proxy_info); 
+			}
         }  
 
         // 解析请求行: GET /api?supernode=host:port HTTP/1.1
@@ -4586,22 +4619,22 @@ int main(int argc, char *argv[])
 
         if (client_sock >= 0)
         {
-            // if (verbose)
-            // {
-            char client_ip[INET6_ADDRSTRLEN];
-            if (client_addr.ss_family == AF_INET)
+            if (verbose)
             {
-                inet_ntop(AF_INET, &((struct sockaddr_in *)&client_addr)->sin_addr,
+            	char client_ip[INET6_ADDRSTRLEN];
+            	if (client_addr.ss_family == AF_INET)
+            	{
+                	inet_ntop(AF_INET, &((struct sockaddr_in *)&client_addr)->sin_addr,
                           client_ip, sizeof(client_ip));
-                fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
-            }
-            else if (client_addr.ss_family == AF_INET6)
-            {
-                inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&client_addr)->sin6_addr,
+                	fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
+            	}
+            	else if (client_addr.ss_family == AF_INET6)
+            	{
+                	inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&client_addr)->sin6_addr,
                           client_ip, sizeof(client_ip));
-                fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
+                	fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
+            	}
             }
-            // }
             handle_http_request(client_sock);
         }
         else if (errno != EINTR)
