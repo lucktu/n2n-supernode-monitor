@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <syslog.h> 
+#include <signal.h>
 
 #define N2N_COMMUNITY_SIZE 20
 #define N2N_MAC_SIZE 6
@@ -865,6 +866,47 @@ static void load_config(const char *config_file)
     }  
 }
 
+static void save_history(const host_stats_t *host)
+{
+    // 确保目录存在
+    struct stat st = {0};
+    if (stat(STATE_DIR, &st) == -1)
+    {
+        if (mkdir(STATE_DIR, 0755) == -1)
+        {
+            fprintf(stderr, "[%s] [ERROR]: 无法创建目录 %s: %s\n", timestamp(), STATE_DIR, strerror(errno));
+            return;
+        }
+    }
+
+    char filename[512];
+    snprintf(filename, sizeof(filename), "%s/%s_%d.dat", STATE_DIR, host->host, host->port);
+
+    FILE *f = fopen(filename, "wb");
+    if (!f)
+    {
+        fprintf(stderr, "[%s] [ERROR]: 无法写入检测记录文件 %s: %s\n", timestamp(), filename, strerror(errno));
+        return;
+    }
+
+    fwrite(&host->history_index, sizeof(int), 1, f);
+    fwrite(&host->history_count, sizeof(int), 1, f);
+    fwrite(host->history, sizeof(check_record_t), MAX_HISTORY, f);
+    fwrite(&host->total_checks, sizeof(int), 1, f);
+    fwrite(&host->success_v1, sizeof(int), 1, f);
+    fwrite(&host->success_v2, sizeof(int), 1, f);
+    fwrite(&host->success_v2s, sizeof(int), 1, f);
+    fwrite(&host->success_v3, sizeof(int), 1, f);
+
+    fclose(f);
+
+    if (verbose)
+    {
+        fprintf(stderr, "[%s] [DEBUG]: 已保存 %s:%d 的历史记录 (共 %d 条)\n",
+                timestamp(), host->host, host->port, host->history_count);
+    }
+}
+
 // 重新加载配置文件  
 static void reload_config(void) {  
     if (g_state.config_file_path[0] == '\0') {  
@@ -876,6 +918,15 @@ static void reload_config(void) {
     }  
       
     pthread_mutex_lock(&g_state.lock);  
+
+	// 保存所有主机的历史记录  
+    for (int i = 0; i < g_state.host_count; i++) {  
+        save_history(&g_state.hosts[i]);  
+        if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: 配置重载前已保存 %s:%d 的历史检测记录\n",  
+                    timestamp(), g_state.hosts[i].host, g_state.hosts[i].port);  
+        }  
+    }  
       
     // 保存旧的主机数量  
     int old_count = g_state.host_count;  
@@ -1621,47 +1672,6 @@ void generate_html(char *buf, size_t bufsize)
     pthread_mutex_unlock(&g_state.lock);
 }
 
-static void save_history(const host_stats_t *host)
-{
-    // 确保目录存在
-    struct stat st = {0};
-    if (stat(STATE_DIR, &st) == -1)
-    {
-        if (mkdir(STATE_DIR, 0755) == -1)
-        {
-            fprintf(stderr, "[%s] [ERROR]: 无法创建目录 %s: %s\n", timestamp(), STATE_DIR, strerror(errno));
-            return;
-        }
-    }
-
-    char filename[512];
-    snprintf(filename, sizeof(filename), "%s/%s_%d.dat", STATE_DIR, host->host, host->port);
-
-    FILE *f = fopen(filename, "wb");
-    if (!f)
-    {
-        fprintf(stderr, "[%s] [ERROR]: 无法写入检测记录文件 %s: %s\n", timestamp(), filename, strerror(errno));
-        return;
-    }
-
-    fwrite(&host->history_index, sizeof(int), 1, f);
-    fwrite(&host->history_count, sizeof(int), 1, f);
-    fwrite(host->history, sizeof(check_record_t), MAX_HISTORY, f);
-    fwrite(&host->total_checks, sizeof(int), 1, f);
-    fwrite(&host->success_v1, sizeof(int), 1, f);
-    fwrite(&host->success_v2, sizeof(int), 1, f);
-    fwrite(&host->success_v2s, sizeof(int), 1, f);
-    fwrite(&host->success_v3, sizeof(int), 1, f);
-
-    fclose(f);
-
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 已保存 %s:%d 的历史记录 (共 %d 条)\n",
-                timestamp(), host->host, host->port, host->history_count);
-    }
-}
-
 void generate_svg_response(int client_sock, int is_online, float uptime,       
                           int v1_ok, int v2_ok, int v2s_ok, int v3_ok) {    
     if (verbose) {      
@@ -2369,6 +2379,34 @@ static int init_http_server(int port)
     return http_sock;
 }
 
+// 信号处理函数 - 保存所有历史记录后退出  
+void signal_handler(int signum) {  
+    if (verbose) {  
+        fprintf(stderr, "\n[%s] [INFO]: 收到信号 %d，正在保存历史检测记录并退出...\n",   
+                timestamp(), signum);  
+    }  
+      
+    // 停止监控线程  
+    g_state.running = 0;  
+      
+    // 保存所有主机的历史记录  
+    pthread_mutex_lock(&g_state.lock);  
+    for (int i = 0; i < g_state.host_count; i++) {  
+        save_history(&g_state.hosts[i]);  
+        if (verbose) {  
+            fprintf(stderr, "[%s] [DEBUG]: 已保存 %s:%d 的历史检测记录\n",  
+                    timestamp(), g_state.hosts[i].host, g_state.hosts[i].port);  
+        }  
+    }  
+    pthread_mutex_unlock(&g_state.lock);  
+      
+    if (verbose) {  
+        fprintf(stderr, "[%s] [INFO]: 所有历史检测记录已保存，程序退出\n", timestamp());  
+    }  
+      
+    exit(0);  
+}
+
 // 打印帮助信息
 static void print_help(const char *prog_name)
 {
@@ -2581,6 +2619,14 @@ int main(int argc, char *argv[])
     g_state.check_interval_minutes = check_interval;
     g_state.start_time = time(NULL);
     g_state.running = 1;
+	// 注册信号处理函数  
+	signal(SIGTERM, signal_handler);  // kill 命令  
+	signal(SIGINT, signal_handler);   // Ctrl+C  
+	signal(SIGHUP, signal_handler);   // 终端断开 
+	if (verbose) {  
+    	fprintf(stderr, "[%s] [DEBUG]: 已注册信号处理函数 (SIGTERM, SIGINT, SIGHUP)\n",   
+            timestamp());  
+	}
 
     // 创建状态目录
     struct stat st = {0};
