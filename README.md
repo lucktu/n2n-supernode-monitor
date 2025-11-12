@@ -13,12 +13,13 @@ N2N supernode 检测工具
 选项:
   -p <端口>       服务主页监听端口 (默认: 8585)
   -i <分钟>       自动探测间隔时间（默认: 1)
-  -r <分钟>       允许主页里手动探测的间隔时间（默认: 1)
+  -r <分钟>       允许主页里手动探测的最小间隔时间（默认: 1)
   -t <秒>         探测超时时间（默认: 1)
   -z <次数>       探测超时或失败后最大重试次数 (默认: 5)
   -j <数量>       保存历史检测记录条数 (默认: 300条/主机)
   -d <路径>       历史检测记录保存目录 (默认: /tmp/n2n_monitor)
   -f <文件>       从指定的文件读取主机列表(一行一个，支持备注)
+  -w <文件>       探测时当主机状态发生变化后调用的脚本
   -c <社区名>     探测使用的社区名称 (默认: N2N_check_bot)
   -m <MAC地址>    探测使用的MAC地址 (默认: a1:b2:c3:d4:f5:06)
   -6              服务主页启用 IPv6 支持
@@ -29,6 +30,11 @@ N2N supernode 检测工具
 主机列表文件格式:
   host:port|备注|主页展示的主机名
   例如: n2n.example.com:10086|北京电信|隐私.com
+
+回调脚本传递参数:
+  主机(host:port) 版本(v1 v2 v2s v3 Unknown) 状态(up down)
+  例如: script_file.sh n2n.example.com:10086 v1 up
+  例如: script_file.sh n2n.example.com:10082 Unknown down
 
 命令示例:
   ./n2n_check_http -s -p 8080 -i 2 n2n.example.com:10086 192.168.1.1:10090
@@ -56,6 +62,43 @@ txt:n2n.example.com|TXT记录版
 
 # 解析重定向的主机 以 http: 作为前缀
 http:n2n.example.com|重定向记录版
+
+```
+
+回调脚本文件示例：(只有状态发生变化时才调用，例如 从上线变成离线 从离线变成上线 或域名无法解析)
+
+```
+#!/bin/sh
+
+# 程序传入的第一个是参数 主机
+host="$1"
+
+# 传入的第二个是参数 版本 如果离线的话是 Unknown
+version="$2"
+
+# 传入的第三个是参数 up 或 down
+status="$3"
+
+# 示例一 
+if [ "$host" = "n2n.example.com:10082" ] && [ "$status" = "down" ] ; then
+    # 如果主机是 n2n.example.com:10082 并且离线了 则执行
+    # 这里你可以使用微信推送 等等自定义命令
+
+fi
+
+# 示例二
+if [ "$host" = "n2n.example.com:10082" ] && [ "$status" = "up" ] ; then
+    # 如果主机是 n2n.example.com:10082 并且上线了 则执行
+    # 这里你可以使用微信推送 等等自定义命令
+
+fi
+
+# 示例二
+if [ "$host" = "txt:n2n.example.com" ] && [ "$status" = "down" ] ; then
+    # 如果主机是 txt记录版的 n2n.example.com 无法解析或离线了 则执行
+    # 这里你可以使用微信推送 等等自定义命令
+
+fi
 
 ```
 
