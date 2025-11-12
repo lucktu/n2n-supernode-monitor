@@ -4234,7 +4234,7 @@ static void print_help(const char *prog_name)
     printf("  -r <分钟>       允许主页里手动探测的间隔时间（分钟）(默认: 1)\n");
     printf("  -t <秒>         探测超时时间（秒）(默认: 1)\n");
     printf("  -z <次数>       探测超时或失败后最大重试次数 (默认: 5)\n");
-    printf("  -j <数量>       保存历史检测记录条数/主机 (默认: 300)\n");
+    printf("  -j <数量>       保存历史检测记录条数 (默认: 300条/主机)\n");
     printf("  -d <路径>       历史检测记录保存目录 (默认: /tmp/n2n_monitor)\n");
     printf("  -f <文件>       从指定文件读取主机列表(一行一个，支持备注)\n");
     printf("  -c <社区名>     探测使用的社区名称 (默认: N2N_check_bot)\n");
