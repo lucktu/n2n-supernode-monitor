@@ -39,7 +39,7 @@ N2N supernode 检测工具
 命令示例:
   ./n2n_check_http -s -p 8080 -i 2 n2n.example.com:10086 192.168.1.1:10090
   ./n2n_check_http -s -v -6 "supernode.example.com:7777|北京电信" "192.168.1.1:10090|自建"
-  ./n2n_check_http -s -p 8080 -i 2 -f n2n_host.conf
+  ./n2n_check_http -s -p 8080 -i 2 -f /etc/n2n_host.conf -w /etc/n2n_push.sh
 ```
 
 - 命令行添加备注需要英文的双引号 `""` 包裹才行，配置文件则无需双引号
