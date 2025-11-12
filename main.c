@@ -4830,7 +4830,6 @@ int main(int argc, char *argv[])
         h->port = port;
         strncpy(h->note, note, sizeof(h->note) - 1);
         strncpy(h->display_name, display_name, sizeof(h->display_name) - 1);
-        h->last_online_status = -1;
 
         // 初始化 max_history 并分配内存
         h->max_history = g_max_history;
