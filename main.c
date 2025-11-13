@@ -2373,7 +2373,7 @@ void generate_html(char *buf, size_t bufsize)
                        "    var row = rows[i];\n"
                        "    var versionCell = row.cells[2].textContent;\n"
                        "    var statusCell = row.cells[4].textContent;\n"
-                       "    var showVersion = (versionFilter === 'v2');\n"
+                       "    var showVersion = (versionFilter === 'all');\n"
                        "    if (!showVersion) {\n"
                        "      var badges = versionCell.split(/\\s+/);\n"
                        "      for (var j = 0; j < badges.length; j++) {\n"
