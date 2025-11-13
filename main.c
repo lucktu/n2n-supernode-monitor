@@ -90,122 +90,130 @@ typedef struct
 static uptime_state_t g_state = {0};
 
 // syslog 转发线程
-void *syslog_forwarder_thread(void *arg)  
-{  
-    (void)arg;  
-    char buffer[4096];  
-    char line_buffer[8192] = {0};  // 行缓冲区  
-    size_t line_len = 0;           // 当前行长度  
-    ssize_t n;  
-    int original_stderr = *(int *)arg; // 接收原始 stderr  
-  
-    openlog("【N2N-monitor】", LOG_PID | LOG_CONS, LOG_DAEMON);  
-  
-    if (verbose)  
-    {  
-        syslog(LOG_INFO, "syslog 日志输出已启动");  
-    }  
-  
-    while (g_syslog_running && (n = read(g_syslog_pipe[0], buffer, sizeof(buffer) - 1)) > 0)  
-    {  
-        // 逐字符处理,查找换行符  
-        for (ssize_t i = 0; i < n; i++)  
-        {  
-            if (buffer[i] == '\n')  
-            {  
-                // 遇到换行符,输出完整的行  
-                line_buffer[line_len] = '\0';  
-                  
-                // 解析日志级别  
-                int priority = LOG_INFO;  
-                if (strstr(line_buffer, "[ERROR]"))  
-                {  
-                    priority = LOG_ERR;  
-                }  
-                else if (strstr(line_buffer, "[WARN]"))  
-                {  
-                    priority = LOG_WARNING;  
-                }  
-                else if (strstr(line_buffer, "[DEBUG]"))  
-                {  
-                    priority = LOG_DEBUG;  
-                }  
-                  
-                // 写入 syslog  
-                syslog(priority, "%s", line_buffer);  
-                  
-                // 同时输出到原始控制台(包含换行符)  
-                if (original_stderr >= 0)  
-                {  
-                    ssize_t written = write(original_stderr, line_buffer, line_len);  
-                    if (written < 0)  
-                    {  
-                        int err = errno;  
-                        if (err == EBADF || err == EPIPE)  
-                        {  
-                            // 致命错误,停止写入控制台  
-                            if (verbose)  
-                            {  
-                                syslog(LOG_WARNING, "控制台输出已禁用: %s", strerror(err));  
-                            }  
-                            close(original_stderr);  
-                            original_stderr = -1;  
-                        }  
-                        else if (verbose && err != EINTR)  
-                        {  
-                            // 非中断错误才记录  
-                            syslog(LOG_WARNING, "日志同步输出到控制台失败: %s", strerror(err));  
-                        }  
-                    }  
-                    else  
-                    {  
-                        // 成功写入行内容,添加换行符  
-                        write(original_stderr, "\n", 1);  
-                    }  
-                }  
-                  
-                // 重置行缓冲区  
-                line_len = 0;  
-            }  
-            else  
-            {  
-                // 累积字符到行缓冲区  
-                if (line_len < sizeof(line_buffer) - 1)  
-                {  
-                    line_buffer[line_len++] = buffer[i];  
-                }  
-                else if (verbose)  
-                {  
-                    // 行太长,记录警告(只记录一次)  
-                    static int overflow_warned = 0;  
-                    if (!overflow_warned)  
-                    {  
-                        syslog(LOG_WARNING, "日志行超过缓冲区大小,已截断");  
-                        overflow_warned = 1;  
-                    }  
-                }  
-            }  
-        }  
-    }  
-      
-    // 处理最后可能未完成的行  
-    if (line_len > 0)  
-    {  
-        line_buffer[line_len] = '\0';  
-        syslog(LOG_INFO, "%s", line_buffer);  
-        if (original_stderr >= 0)  
-        {  
-            write(original_stderr, line_buffer, line_len);  
-            write(original_stderr, "\n", 1);  
-        }  
-    }  
-  
-    closelog();  
-    if (original_stderr >= 0)  
-    {  
-        close(original_stderr);  
-    }  
-    return NULL;  
+void *syslog_forwarder_thread(void *arg)
+{
+    (void)arg;
+    char buffer[4096];
+    char line_buffer[8192] = {0}; // 行缓冲区
+    size_t line_len = 0;          // 当前行长度
+    ssize_t n;
+    int original_stderr = *(int *)arg; // 接收原始 stderr
+
+    openlog("【N2N-monitor】", LOG_PID | LOG_CONS, LOG_DAEMON);
+
+    if (verbose)
+    {
+        syslog(LOG_INFO, "syslog 日志输出已启动");
+    }
+
+    while (g_syslog_running && (n = read(g_syslog_pipe[0], buffer, sizeof(buffer) - 1)) > 0)
+    {
+        // 逐字符处理,查找换行符
+        for (ssize_t i = 0; i < n; i++)
+        {
+            if (buffer[i] == '\n')
+            {
+                // 遇到换行符,输出完整的行
+                line_buffer[line_len] = '\0';
+
+                // 解析日志级别
+                int priority = LOG_INFO;
+                if (strstr(line_buffer, "[ERROR]"))
+                {
+                    priority = LOG_ERR;
+                }
+                else if (strstr(line_buffer, "[WARN]"))
+                {
+                    priority = LOG_WARNING;
+                }
+                else if (strstr(line_buffer, "[DEBUG]"))
+                {
+                    priority = LOG_DEBUG;
+                }
+
+                // 写入 syslog
+                syslog(priority, "%s", line_buffer);
+
+                // 同时输出到原始控制台(包含换行符)
+                if (original_stderr >= 0)
+                {
+                    ssize_t written = write(original_stderr, line_buffer, line_len);
+                    if (written < 0)
+                    {
+                        int err = errno;
+                        if (err == EBADF || err == EPIPE)
+                        {
+                            // 致命错误,停止写入控制台
+                            if (verbose)
+                            {
+                                syslog(LOG_WARNING, "控制台输出已禁用: %s", strerror(err));
+                            }
+                            close(original_stderr);
+                            original_stderr = -1;
+                        }
+                        else if (verbose && err != EINTR)
+                        {
+                            // 非中断错误才记录
+                            syslog(LOG_WARNING, "日志同步输出到控制台失败: %s", strerror(err));
+                        }
+                    }
+                    else
+                    {
+                        // 成功写入行内容,添加换行符
+                        if (write(original_stderr, "\n", 1) < 0 && verbose && errno != EINTR)
+                        {
+                            syslog(LOG_WARNING, "写入换行符失败: %s", strerror(errno));
+                        }
+                    }
+                }
+
+                // 重置行缓冲区
+                line_len = 0;
+            }
+            else
+            {
+                // 累积字符到行缓冲区
+                if (line_len < sizeof(line_buffer) - 1)
+                {
+                    line_buffer[line_len++] = buffer[i];
+                }
+                else if (verbose)
+                {
+                    // 行太长,记录警告(只记录一次)
+                    static int overflow_warned = 0;
+                    if (!overflow_warned)
+                    {
+                        syslog(LOG_WARNING, "日志行超过缓冲区大小,已截断");
+                        overflow_warned = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // 处理最后可能未完成的行
+    if (line_len > 0)
+    {
+        line_buffer[line_len] = '\0';
+        syslog(LOG_INFO, "%s", line_buffer);
+        if (original_stderr >= 0)
+        {
+            if (write(original_stderr, line_buffer, line_len) >= 0)
+            {
+                if (write(original_stderr, "\n", 1) < 0 && verbose && errno != EINTR)
+                {
+                    syslog(LOG_WARNING, "写入换行符失败: %s", strerror(errno));
+                }
+            }
+        }
+    }
+
+    closelog();
+    if (original_stderr >= 0)
+    {
+        close(original_stderr);
+    }
+    return NULL;
 }
 
 // 编码函数
@@ -2249,10 +2257,11 @@ void generate_html(char *buf, size_t bufsize)
     char time_str[128];
     strftime(time_str, sizeof(time_str), "%Y年%m月%d日 %H时%M分%S秒", tm_info);
 
-    // 页面刷新间隔等于检测间隔(秒),但最小为15分钟 
+    // 页面刷新间隔等于检测间隔(秒),但最小为15分钟
     int refresh_seconds = g_state.check_interval_minutes * 60;
-    if (refresh_seconds < 900) {  
-        refresh_seconds = 900;  // 最小15分钟  
+    if (refresh_seconds < 900)
+    {
+        refresh_seconds = 900; // 最小15分钟
     }
 
     int len = snprintf(buf, bufsize,
@@ -2852,6 +2861,8 @@ void generate_html(char *buf, size_t bufsize)
     {
         for (int i = 0; i < g_state.host_count; i++)
         {
+            char *history_data = NULL;
+            size_t history_data_size = 0;
             // 动态检查剩余空间 (保留 5% 作为安全余量)
             size_t safety_margin = bufsize / 20;
             if ((size_t)len >= bufsize - safety_margin)
@@ -2936,20 +2947,72 @@ void generate_html(char *buf, size_t bufsize)
             const char *status_text = h->last_status;
 
             // 构建历史记录数据字符串(用于悬浮提示和模态窗口)
-            char history_data[4096] = "";
             if (h->history_count > 0)
             {
-                // 从最旧的记录开始遍历(循环数组的正确顺序)
-                int start_idx = (h->history_count < h->max_history) ? 0 : h->history_index;
-                for (int j = 0; j < h->history_count; j++)
+                // 每条记录约20字节 (时间戳+状态+逗号) + 1KB安全余量
+                history_data_size = (h->history_count * 20) + 1024;
+                history_data = malloc(history_data_size);
+
+                if (!history_data)
                 {
-                    int idx = (start_idx + j) % h->max_history;
-                    char record[64];
-                    snprintf(record, sizeof(record), "%ld:%d%s",
-                             h->history[idx].timestamp,
-                             h->history[idx].success,
-                             (j < h->history_count - 1) ? "," : "");
-                    strcat(history_data, record);
+                    // malloc失败时使用较小的fallback缓冲区
+                    if (verbose)
+                    {
+                        fprintf(stderr, "[%s] [WARN]: 无法分配 %zu 字节历史数据缓冲区,使用fallback\n",
+                                timestamp(), history_data_size);
+                    }
+                    history_data_size = 4096;
+                    history_data = malloc(history_data_size);
+                }
+
+                if (history_data)
+                {
+                    memset(history_data, 0, history_data_size);
+
+                    // 从最旧的记录开始遍历(循环数组的正确顺序)
+                    int start_idx = (h->history_count < h->max_history) ? 0 : h->history_index;
+                    for (int j = 0; j < h->history_count; j++)
+                    {
+                        int idx = (start_idx + j) % h->max_history;
+                        char record[64];
+                        snprintf(record, sizeof(record), "%ld:%d%s",
+                                 h->history[idx].timestamp,
+                                 h->history[idx].success,
+                                 (j < h->history_count - 1) ? "," : "");
+
+                        // 边界检查,防止 strcat 溢出
+                        size_t current_len = strlen(history_data);
+                        if (current_len + strlen(record) + 1 < history_data_size)
+                        {
+                            strcat(history_data, record);
+                        }
+                        else
+                        {
+                            if (verbose)
+                            {
+                                fprintf(stderr, "[%s] [WARN]: %s:%d 历史数据缓冲区已满,已截断\n",
+                                        timestamp(), h->host, h->port);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 如果分配失败,使用空字符串
+            if (!history_data)
+            {
+                history_data = malloc(1);
+                if (history_data)
+                {
+                    history_data[0] = '\0';
+                }
+                else
+                {
+                    // 极端情况:连1字节都分配不了,跳过这个主机
+                    fprintf(stderr, "[%s] [ERROR]: 无法为 %s:%d 分配任何内存,跳过显示这个主机\n",
+                            timestamp(), h->host, h->port);
+                    continue; // 跳过这个主机的HTML生成
                 }
             }
 
@@ -3027,6 +3090,8 @@ void generate_html(char *buf, size_t bufsize)
                             status_class, status_text,
                             last_check_str,
                             h->note[0] ? h->note : "✍️");
+            free(history_data);
+            history_data = NULL;
         }
     }
     // 关闭 tbody、table 与页面结构（保留原结构，仅样式与脚本已现代化）
