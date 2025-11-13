@@ -5116,6 +5116,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, signal_handler); // kill 命令
     signal(SIGINT, signal_handler);  // Ctrl+C
     signal(SIGHUP, signal_handler);  // 终端断开
+    signal(SIGPIPE, SIG_IGN);        // 忽略 SIGPIPE 信号
 
     if (verbose)
     {
