@@ -90,59 +90,122 @@ typedef struct
 static uptime_state_t g_state = {0};
 
 // syslog 转发线程
-void *syslog_forwarder_thread(void *arg)
-{
-    (void)arg;
-    char buffer[4096];
-    ssize_t n;
-    int original_stderr = *(int *)arg; // 接收原始 stderr
-
-    openlog("【N2N-monitor】", LOG_PID | LOG_CONS, LOG_DAEMON);
-
-    if (verbose)
-    {
-        syslog(LOG_INFO, "syslog 日志输出已启动");
-    }
-
-    while (g_syslog_running && (n = read(g_syslog_pipe[0], buffer, sizeof(buffer) - 1)) > 0)
-    {
-        buffer[n] = '\0';
-
-        // 解析日志级别
-        int priority = LOG_INFO;
-        if (strstr(buffer, "[ERROR]"))
-        {
-            priority = LOG_ERR;
-        }
-        else if (strstr(buffer, "[WARN]"))
-        {
-            priority = LOG_WARNING;
-        }
-        else if (strstr(buffer, "[DEBUG]"))
-        {
-            priority = LOG_DEBUG;
-        }
-
-        // 写入 syslog
-        syslog(priority, "%s", buffer);
-
-        // 同时输出到原始控制台
-        if (original_stderr >= 0)
-        {
-            ssize_t written = write(original_stderr, buffer, n);
-            if (written < 0 && verbose)
-            {
-                syslog(LOG_WARNING, "日志同步输出到控制台失败: %s", strerror(errno));
-            }
-        }
-    }
-
-    closelog();
-    if (original_stderr >= 0)
-    {
-        close(original_stderr);
-    }
-    return NULL;
+void *syslog_forwarder_thread(void *arg)  
+{  
+    (void)arg;  
+    char buffer[4096];  
+    char line_buffer[8192] = {0};  // 行缓冲区  
+    size_t line_len = 0;           // 当前行长度  
+    ssize_t n;  
+    int original_stderr = *(int *)arg; // 接收原始 stderr  
+  
+    openlog("【N2N-monitor】", LOG_PID | LOG_CONS, LOG_DAEMON);  
+  
+    if (verbose)  
+    {  
+        syslog(LOG_INFO, "syslog 日志输出已启动");  
+    }  
+  
+    while (g_syslog_running && (n = read(g_syslog_pipe[0], buffer, sizeof(buffer) - 1)) > 0)  
+    {  
+        // 逐字符处理,查找换行符  
+        for (ssize_t i = 0; i < n; i++)  
+        {  
+            if (buffer[i] == '\n')  
+            {  
+                // 遇到换行符,输出完整的行  
+                line_buffer[line_len] = '\0';  
+                  
+                // 解析日志级别  
+                int priority = LOG_INFO;  
+                if (strstr(line_buffer, "[ERROR]"))  
+                {  
+                    priority = LOG_ERR;  
+                }  
+                else if (strstr(line_buffer, "[WARN]"))  
+                {  
+                    priority = LOG_WARNING;  
+                }  
+                else if (strstr(line_buffer, "[DEBUG]"))  
+                {  
+                    priority = LOG_DEBUG;  
+                }  
+                  
+                // 写入 syslog  
+                syslog(priority, "%s", line_buffer);  
+                  
+                // 同时输出到原始控制台(包含换行符)  
+                if (original_stderr >= 0)  
+                {  
+                    ssize_t written = write(original_stderr, line_buffer, line_len);  
+                    if (written < 0)  
+                    {  
+                        int err = errno;  
+                        if (err == EBADF || err == EPIPE)  
+                        {  
+                            // 致命错误,停止写入控制台  
+                            if (verbose)  
+                            {  
+                                syslog(LOG_WARNING, "控制台输出已禁用: %s", strerror(err));  
+                            }  
+                            close(original_stderr);  
+                            original_stderr = -1;  
+                        }  
+                        else if (verbose && err != EINTR)  
+                        {  
+                            // 非中断错误才记录  
+                            syslog(LOG_WARNING, "日志同步输出到控制台失败: %s", strerror(err));  
+                        }  
+                    }  
+                    else  
+                    {  
+                        // 成功写入行内容,添加换行符  
+                        write(original_stderr, "\n", 1);  
+                    }  
+                }  
+                  
+                // 重置行缓冲区  
+                line_len = 0;  
+            }  
+            else  
+            {  
+                // 累积字符到行缓冲区  
+                if (line_len < sizeof(line_buffer) - 1)  
+                {  
+                    line_buffer[line_len++] = buffer[i];  
+                }  
+                else if (verbose)  
+                {  
+                    // 行太长,记录警告(只记录一次)  
+                    static int overflow_warned = 0;  
+                    if (!overflow_warned)  
+                    {  
+                        syslog(LOG_WARNING, "日志行超过缓冲区大小,已截断");  
+                        overflow_warned = 1;  
+                    }  
+                }  
+            }  
+        }  
+    }  
+      
+    // 处理最后可能未完成的行  
+    if (line_len > 0)  
+    {  
+        line_buffer[line_len] = '\0';  
+        syslog(LOG_INFO, "%s", line_buffer);  
+        if (original_stderr >= 0)  
+        {  
+            write(original_stderr, line_buffer, line_len);  
+            write(original_stderr, "\n", 1);  
+        }  
+    }  
+  
+    closelog();  
+    if (original_stderr >= 0)  
+    {  
+        close(original_stderr);  
+    }  
+    return NULL;  
 }
 
 // 编码函数
@@ -4107,9 +4170,9 @@ void handle_testmy_request(int client_sock, const char *path)
 
     if (verbose)
     {
-        fprintf(stderr, "[%s] [DEBUG]: 测测我的 - 开始检查用户输入的: %s (清理后: %s)\n",
+        fprintf(stderr, "[%s] [DEBUG]: 测测我的 - 用户输入的主机: %s (格式化后: %s)\n",
                 timestamp(), decoded, cleaned_decoded);
-        fprintf(stderr, "[%s] [DEBUG]: 测测我的 - 已配置的主机: %s (清理后: %s), 端口: %d\n",
+        fprintf(stderr, "[%s] [DEBUG]: 测测我的 - 本地已配置的主机: %s (格式化后: %s), 端口: %d\n",
                 timestamp(), host, cleaned_host, port);
     }
 
@@ -4275,7 +4338,7 @@ void handle_http_request(int client_sock)
 
         if (xff || xri || cfip)
         {
-            strcat(proxy_info, "代理信息: ");
+            strcat(proxy_info, "访问者IP: ");
 
             if (xff)
             {
