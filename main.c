@@ -3989,10 +3989,10 @@ void handle_refresh_request(int client_sock)
                 }
             }
             h->last_online_status = is_online;
-            add_check_record(h, is_online);
+            //add_check_record(h, is_online);
             snprintf(h->last_status, sizeof(h->last_status),
                      is_online ? "✓ 在线" : "✗ 离线");
-            save_history(h); // 确保数据已保存
+            //save_history(h); // 确保数据已保存
             pthread_mutex_unlock(&g_state.lock);
         }
 
@@ -4653,7 +4653,7 @@ void *monitor_thread(void *arg)
             h->last_online_status = is_online;
 
             // 【新增】添加检测记录到历史数组
-            //add_check_record(h, is_online);
+            add_check_record(h, is_online);
 
             if (verbose)
             {
