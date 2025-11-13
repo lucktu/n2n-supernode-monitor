@@ -2820,7 +2820,7 @@ void generate_html(char *buf, size_t bufsize)
                        "</select>\n"
                        "<label style='margin-left:20px'>状态筛选:</label>\n"
                        "<select id='statusFilter' onchange='filterTable()'>\n"
-                       "<option value='all'>全部</option>\n"
+                       "<option value='v2'>v2</option>\n"
                        "<option value='online'>在线</option>\n"
                        "<option value='offline'>离线</option>\n"
                        "</select>\n"
