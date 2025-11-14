@@ -532,7 +532,7 @@ static int is_valid_v3_ack(const uint8_t *buf, size_t len, const uint8_t *expect
 // 检测单个 supernode (使用单socket非阻塞方式)
 int test_supernode_internal(const char *host, int port, int *v1_ok, int *v2_ok, int *v2s_ok, int *v3_ok)
 {
-    const int MAX_RETRIES = g_max_retries - 1; // 本次也算一次，所以减1
+    const int MAX_RETRIES = g_max_retries;
     int retry_attempt = 0;
 
     *v1_ok = *v2_ok = *v2s_ok = *v3_ok = 0;
@@ -2345,12 +2345,12 @@ void generate_html(char *buf, size_t bufsize)
                        ".status-online{color:var(--success);font-weight:700}\n"
                        ".status-offline{color:var(--danger);font-weight:700}\n"
                        ".progress-container{width:100%%;background:#f0f0f0;border-radius:10px;overflow:hidden;height:24px;position:relative;}\n"
-                       ".progress-bar-bg{position:absolute;left:0;top:0;height:100%%;transition:width 0.3s ease;min-width:100%%;}\n"                                                                                // 添加 min-width:100%%  // 新增背景层
-                       ".progress-bar-text{position:absolute;left:0;top:0;width:100%%;height:100%%;display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;z-index:1;}\n" // 新增文字层
-                       ".tooltip{position:fixed;background:rgba(31,41,55,0.95);color:white;padding:10px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.2);z-index:1001;pointer-events:none;max-width:320px;transform:translateY(6px);opacity:0;transition:opacity 180ms ease,transform 180ms ease}\n"
+                       ".progress-bar-bg{position:absolute;left:0;top:0;height:100%%;transition:width 0.3s ease;min-width:100%%;}\n"                                                                                                                                                                          // 添加 min-width:100%%  // 新增背景层
+                       ".progress-bar-text{position:absolute;left:0;top:0;width:100%%;height:100%%;display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;z-index:1;}\n"                                                                                           // 新增文字层
+                       ".tooltip{position:fixed;background:rgba(31,41,55,0.95);color:white;padding:10px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.2);z-index:1001;pointer-events:none;max-width:400px;transform:translateY(6px);opacity:0;transition:opacity 180ms ease,transform 180ms ease}\n" // 增加 tooltip 的 max-width
                        ".tooltip.show{opacity:1;transform:translateY(0)}\n"
                        ".tooltip-title{font-weight:700;margin-bottom:6px;}\n"
-                       ".tooltip-history{display:flex;gap:4px;flex-wrap:wrap;max-height:60px;overflow:hidden;max-width:250px;}\n" // 添加 max-width
+                       ".tooltip-history{display:flex;gap:4px;flex-wrap:wrap;max-height:60px;overflow:hidden;max-width:360px;}\n" // 添加 max-width
                        ".history-bar{width:8px;height:28px;border-radius:2px;flex-shrink:0;}\n"                                   // 添加 flex-shrink:0
                        ".history-online{background:var(--success)}\n"
                        ".history-offline{background:var(--danger)}\n"
@@ -2481,7 +2481,29 @@ void generate_html(char *buf, size_t bufsize)
                        "  header.className = 'sortable ' + (sortOrder === 1 ? 'sort-asc' : 'sort-desc');\n"
                        "}\n"
                        "var tooltip = null;\n"
-                       "var tooltip = null;\n"
+                       "function processHistoryData(historyData) {\n"
+                       "  var records = historyData.split(',');\n"
+                       "  var uniqueRecords = {};\n"
+                       "  var sortedRecords = [];\n"
+                       "  \n"
+                       "  // 去重并收集记录\n"
+                       "  for (var i = 0; i < records.length; i++) {\n"
+                       "    var parts = records[i].split(':');\n"
+                       "    if (parts.length >= 2) {\n"
+                       "      var timestamp = parseInt(parts[0]);\n"
+                       "      if (!uniqueRecords[timestamp]) {\n"
+                       "        uniqueRecords[timestamp] = parts[1];\n"
+                       "        sortedRecords.push({timestamp: timestamp, status: parts[1] === '1'});\n"
+                       "      }\n"
+                       "    }\n"
+                       "  }\n"
+                       "  \n"
+                       "  // 按时间戳排序(从新到旧)\n"
+                       "  sortedRecords.sort(function(a, b) { return b.timestamp - a.timestamp; });\n"
+                       "  \n"
+                       "  return sortedRecords;\n"
+                       "}\n"
+                       "\n"
                        "function showHistoryTooltip(event, historyData) {\n"
                        "  if (!tooltip) {\n"
                        "    tooltip = document.createElement('div');\n"
@@ -2491,16 +2513,24 @@ void generate_html(char *buf, size_t bufsize)
                        "  \n"
                        "  var html = '<div class=\"tooltip-title\">最近60次检测记录</div>';\n"
                        "  html += '<div class=\"tooltip-history\">';\n"
-                       "  var records = historyData.split(',');\n"
+                       "  \n"
+                       "  // 使用共享函数获取排序后的记录\n"
+                       "  var sortedRecords = processHistoryData(historyData);\n"
+                       "  \n"
+                       "  // 只取最新60条\n"
                        "  var maxDisplay = 60;\n"
-                       "  var startIdx = Math.max(0, records.length - maxDisplay);\n"
-                       "  for (var i = startIdx; i < records.length; i++) {\n"
-                       "    var parts = records[i].split(':');\n"
-                       "    if (parts.length >= 2) {\n"
-                       "      var status = parts[1] === '1' ? 'history-online' : 'history-offline';\n"
-                       "      html += '<div class=\"history-bar ' + status + '\"></div>';\n"
-                       "    }\n"
+                       "  var displayRecords = sortedRecords.slice(0, maxDisplay);\n"
+                       "  \n"
+                       "  // 反转数组,从旧到新显示(最新的在右边)\n"
+                       "  displayRecords.reverse();\n"
+                       "  \n"
+                       "  // 生成HTML\n"
+                       "  for (var i = 0; i < displayRecords.length; i++) {\n"
+                       "    var record = displayRecords[i];\n"
+                       "    var status = record.status ? 'history-online' : 'history-offline';\n"
+                       "    html += '<div class=\"history-bar ' + status + '\"></div>';\n"
                        "  }\n"
+                       "  \n"
                        "  html += '</div>';\n"
                        "  tooltip.innerHTML = html;\n"
                        "  \n"
@@ -2555,26 +2585,10 @@ void generate_html(char *buf, size_t bufsize)
                        "  html += '</div>';\n"
                        "  html += '<div class=\"history-grid\">';\n"
                        "  \n"
-                       "  var records = historyData.split(',');\n"
-                       "  var uniqueRecords = {};\n"
-                       "  var sortedRecords = [];\n"
+                       "  // 使用共享函数获取排序后的记录\n"
+                       "  var sortedRecords = processHistoryData(historyData);\n"
                        "  \n"
-                       "  // 去重并收集记录\n"
-                       "  for (var i = 0; i < records.length; i++) {\n"
-                       "    var parts = records[i].split(':');\n"
-                       "    if (parts.length >= 2) {\n"
-                       "      var timestamp = parseInt(parts[0]);\n"
-                       "      if (!uniqueRecords[timestamp]) {\n"
-                       "        uniqueRecords[timestamp] = parts[1];\n"
-                       "        sortedRecords.push({timestamp: timestamp, status: parts[1] === '1'});\n"
-                       "      }\n"
-                       "    }\n"
-                       "  }\n"
-                       "  \n"
-                       "  // 按时间戳排序(从新到旧)\n"
-                       "  sortedRecords.sort(function(a, b) { return b.timestamp - a.timestamp; });\n"
-                       "  \n"
-                       "  // 生成 HTML\n"
+                       "  // 生成 HTML (从新到旧显示)\n"
                        "  for (var i = 0; i < sortedRecords.length; i++) {\n"
                        "    var record = sortedRecords[i];\n"
                        "    var date = new Date(record.timestamp * 1000);\n"
@@ -5088,19 +5102,19 @@ void signal_handler(int signum)
     exit(0);
 }
 
-static int calculate_min_interval(int host_count, int parallel_checks)  
-{  
-    // 保守估计：每个主机平均 2 秒（考虑重试）  
-    int avg_check_time_sec = 2;  
-      
-    // 计算最小间隔（秒）  
-    int min_interval_sec = (host_count * avg_check_time_sec) / parallel_checks;  
-      
-    // 转换为分钟，向上取整  
-    int min_interval_min = (min_interval_sec + 59) / 60;  
-      
-    // 最小不低于 1 分钟  
-    return (min_interval_min < 1) ? 1 : min_interval_min;  
+static int calculate_min_interval(int host_count, int parallel_checks)
+{
+    // 保守估计：每个主机平均 2 秒（考虑重试）
+    int avg_check_time_sec = 2;
+
+    // 计算最小间隔（秒）
+    int min_interval_sec = (host_count * avg_check_time_sec) / parallel_checks;
+
+    // 转换为分钟，向上取整
+    int min_interval_min = (min_interval_sec + 59) / 60;
+
+    // 最小不低于 1 分钟
+    return (min_interval_min < 1) ? 1 : min_interval_min;
 }
 
 // 打印帮助信息
@@ -5548,36 +5562,36 @@ int main(int argc, char *argv[])
         }
     }
 
-    // 根据主机数量验证间隔参数 
-    if (g_state.host_count > 0)  
-    {  
-    int min_check_interval = calculate_min_interval(g_state.host_count, g_max_parallel_checks);  
-    int min_refresh_interval = min_check_interval;  // 手动刷新至少与自动检测相同  
-      
-    // 验证 -i 参数  
-    if (check_interval < min_check_interval)  
-    {  
-        fprintf(stderr, "[%s] [WARN]: 自动检测间隔 %d 分钟过短（主机数: %d, 并行线程: %d）\n",  
-                timestamp(), check_interval, g_state.host_count, g_max_parallel_checks);  
-        fprintf(stderr, "[%s] [WARN]: 推荐最小间隔: %d 分钟（基于 %d 个主机 / %d 并行线程）\n",  
-                timestamp(), min_check_interval, g_state.host_count, g_max_parallel_checks);  
-        fprintf(stderr, "[%s] [WARN]: 已自动调整为推荐值: %d 分钟\n",  
-                timestamp(), min_check_interval);  
-        check_interval = min_check_interval;  
-        g_state.check_interval_minutes = check_interval;  
-    }  
-      
-    // 验证 -r 参数  
-    if (manual_refresh_interval < min_refresh_interval)  
-    {  
-        fprintf(stderr, "[%s] [WARN]: 手动检测间隔 %d 分钟过短（主机数: %d, 并行线程: %d）\n",  
-                timestamp(), manual_refresh_interval, g_state.host_count, g_max_parallel_checks);  
-        fprintf(stderr, "[%s] [WARN]: 推荐最小间隔: %d 分钟\n",  
-                timestamp(), min_refresh_interval);  
-        fprintf(stderr, "[%s] [WARN]: 已自动调整为推荐值: %d 分钟\n",  
-                timestamp(), min_refresh_interval);  
-        manual_refresh_interval = min_refresh_interval;  
-    }  
+    // 根据主机数量验证间隔参数
+    if (g_state.host_count > 0)
+    {
+        int min_check_interval = calculate_min_interval(g_state.host_count, g_max_parallel_checks);
+        int min_refresh_interval = min_check_interval; // 手动刷新至少与自动检测相同
+
+        // 验证 -i 参数
+        if (check_interval < min_check_interval)
+        {
+            fprintf(stderr, "[%s] [WARN]: 自动检测间隔 %d 分钟过短（主机数: %d, 并行线程: %d）\n",
+                    timestamp(), check_interval, g_state.host_count, g_max_parallel_checks);
+            fprintf(stderr, "[%s] [WARN]: 推荐最小间隔: %d 分钟（基于 %d 个主机 / %d 并行线程）\n",
+                    timestamp(), min_check_interval, g_state.host_count, g_max_parallel_checks);
+            fprintf(stderr, "[%s] [WARN]: 已自动调整为推荐值: %d 分钟\n",
+                    timestamp(), min_check_interval);
+            check_interval = min_check_interval;
+            g_state.check_interval_minutes = check_interval;
+        }
+
+        // 验证 -r 参数
+        if (manual_refresh_interval < min_refresh_interval)
+        {
+            fprintf(stderr, "[%s] [WARN]: 手动检测间隔 %d 分钟过短（主机数: %d, 并行线程: %d）\n",
+                    timestamp(), manual_refresh_interval, g_state.host_count, g_max_parallel_checks);
+            fprintf(stderr, "[%s] [WARN]: 推荐最小间隔: %d 分钟\n",
+                    timestamp(), min_refresh_interval);
+            fprintf(stderr, "[%s] [WARN]: 已自动调整为推荐值: %d 分钟\n",
+                    timestamp(), min_refresh_interval);
+            manual_refresh_interval = min_refresh_interval;
+        }
     }
 
     // 解析主机列表
