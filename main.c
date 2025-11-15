@@ -5005,324 +5005,378 @@ void handle_testmy_request(int client_sock, const char *path)
 }
 
 // HTTP 请求处理
-void handle_http_request(int client_sock)
-{
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 开始处理 HTTP 请求 (socket fd=%d)\n", timestamp(), client_sock);
-    }
-    char request[2048];
-    ssize_t n = recv(client_sock, request, sizeof(request) - 1, 0);
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: 接收到 %zd 字节请求数据\n", timestamp(), n);
-    }
-
-    if (n > 0)
-    {
-        request[n] = '\0';
-
-        // 查找代理请求头
-        char *xff = find_header_value(request, "X-Forwarded-For");
-        char *xri = find_header_value(request, "X-Real-IP");
-        char *cfip = find_header_value(request, "CF-Connecting-IP");
-
-        // 提取所有请求头的 IP 值  
-        char xff_value[256] = {0};  
-        char xri_value[256] = {0};  
-        char cfip_value[256] = {0};  
-  
-        if (xff)  
+void handle_http_request(int client_sock)  
+{  
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 开始处理 HTTP 请求 (socket fd=%d)\n", timestamp(), client_sock);  
+    }  
+      
+    char request[8192] = {0};  // 增大缓冲区到 8KB  
+    ssize_t total_received = 0;  
+    int header_complete = 0;  
+      
+    // 设置接收超时(5秒)  
+    struct timeval timeout;  
+    timeout.tv_sec = 5;  
+    timeout.tv_usec = 0;  
+    setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));  
+      
+    // 循环接收直到获得完整的 HTTP 头部  
+    while (total_received < (ssize_t)sizeof(request) - 1)  
+    {  
+        ssize_t n = recv(client_sock, request + total_received,   
+                        sizeof(request) - total_received - 1, 0);  
+          
+        if (n > 0)  
         {  
-            sscanf(xff, "%255[^\r\n]", xff_value);  
-        }  
-        if (xri)  
-        {  
-            sscanf(xri, "%255[^\r\n]", xri_value);  
-        }  
-        if (cfip)  
-        {  
-            sscanf(cfip, "%255[^\r\n]", cfip_value);  
-        }  
-  
-        // 构建合并的消息  
-        char proxy_info[2048] = {0};  
-        int proxy_offset = 0;  
-  
-        if (xff || xri || cfip)  
-        {  
-            // 确定第一个非空的 IP 值  
-            char *first_ip = NULL;  
-            if (xff_value[0])  
-                first_ip = xff_value;  
-            else if (xri_value[0])  
-                first_ip = xri_value;  
-            else if (cfip_value[0])  
-                first_ip = cfip_value;  
-  
-            // 检查是否所有非空值都相同  
-            int all_same = 1;  
-            if (first_ip)  
+            total_received += n;  
+            request[total_received] = '\0';  
+              
+            // 检查是否收到完整的 HTTP 头部(以 \r\n\r\n 结束)  
+            if (strstr(request, "\r\n\r\n") != NULL)  
             {  
-                if (xff_value[0] && strcmp(xff_value, first_ip) != 0)  
-                    all_same = 0;  
-                if (xri_value[0] && strcmp(xri_value, first_ip) != 0)  
-                    all_same = 0;  
-                if (cfip_value[0] && strcmp(cfip_value, first_ip) != 0)  
-                    all_same = 0;  
+                header_complete = 1;  
+                break;  
             }  
-  
-            if (all_same && first_ip)  
+        }  
+        else if (n == 0)  
+        {  
+            // 客户端关闭连接  
+            if (verbose)  
             {  
-                // 所有 IP 相同,简化输出  
-                proxy_offset += snprintf(proxy_info + proxy_offset,  
-                                sizeof(proxy_info) - proxy_offset,  
-                                "访问者IP: %s", first_ip);  
+                fprintf(stderr, "[%s] [DEBUG]: 客户端在发送完整请求前关闭连接\n", timestamp());  
+            }  
+            close(client_sock);  
+            return;  
+        }  
+        else  
+        {  
+            // 接收错误或超时  
+            if (errno == EAGAIN || errno == EWOULDBLOCK)  
+            {  
+                if (verbose)  
+                {  
+                    fprintf(stderr, "[%s] [WARN]: 接收 HTTP 请求超时(已接收 %zd 字节)\n",   
+                            timestamp(), total_received);  
+                }  
             }  
             else  
             {  
-                // IP 不同,显示详细信息  
-                proxy_offset += snprintf(proxy_info + proxy_offset,  
-                                sizeof(proxy_info) - proxy_offset,  
-                                "访问者IP: ");  
-                int has_proxy_header = 0;  
-  
-                if (xff_value[0])  
+                if (verbose)  
                 {  
-                    proxy_offset += snprintf(proxy_info + proxy_offset,  
-                                    sizeof(proxy_info) - proxy_offset,  
-                                    "X-Forwarded-For=%s", xff_value);  
-                    has_proxy_header = 1;  
+                    fprintf(stderr, "[%s] [ERROR]: recv() 错误: %s\n", timestamp(), strerror(errno));  
                 }  
+            }  
+            close(client_sock);  
+            return;  
+        }  
+    }  
+      
+    if (!header_complete)  
+    {  
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [WARN]: HTTP 请求头部不完整,缓冲区已满\n", timestamp());  
+        }  
+        close(client_sock);  
+        return;  
+    }  
+      
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 接收到完整 HTTP 请求 (%zd 字节)\n", timestamp(), total_received);  
+    }  
   
-                if (xri_value[0])  
-                {  
-                    if (has_proxy_header)  
-                        proxy_offset += snprintf(proxy_info + proxy_offset,  
-                                        sizeof(proxy_info) - proxy_offset,  
-                                        ", ");  
-                        proxy_offset += snprintf(proxy_info + proxy_offset,  
-                                    sizeof(proxy_info) - proxy_offset,  
-                                    "X-Real-IP=%s", xri_value);  
-                        has_proxy_header = 1;  
-                }  
+    // 查找代理请求头  
+    char *xff = find_header_value(request, "X-Forwarded-For");  
+    char *xri = find_header_value(request, "X-Real-IP");  
+    char *cfip = find_header_value(request, "CF-Connecting-IP");  
   
-                if (cfip_value[0])  
+    // 提取所有请求头的 IP 值    
+    char xff_value[256] = {0};    
+    char xri_value[256] = {0};    
+    char cfip_value[256] = {0};    
+  
+    if (xff)    
+    {    
+        sscanf(xff, "%255[^\r\n]", xff_value);    
+    }    
+    if (xri)    
+    {    
+        sscanf(xri, "%255[^\r\n]", xri_value);    
+    }    
+    if (cfip)    
+    {    
+        sscanf(cfip, "%255[^\r\n]", cfip_value);    
+    }    
+  
+    // 构建合并的消息    
+    char proxy_info[2048] = {0};    
+    int proxy_offset = 0;    
+  
+    if (xff || xri || cfip)    
+    {    
+        // 确定第一个非空的 IP 值    
+        char *first_ip = NULL;    
+        if (xff_value[0])    
+            first_ip = xff_value;    
+        else if (xri_value[0])    
+            first_ip = xri_value;    
+        else if (cfip_value[0])    
+            first_ip = cfip_value;    
+  
+        // 检查是否所有非空值都相同    
+        int all_same = 1;    
+        if (first_ip)    
+        {    
+            if (xff_value[0] && strcmp(xff_value, first_ip) != 0)    
+                all_same = 0;    
+            if (xri_value[0] && strcmp(xri_value, first_ip) != 0)    
+                all_same = 0;    
+            if (cfip_value[0] && strcmp(cfip_value, first_ip) != 0)    
+                all_same = 0;    
+        }    
+  
+        if (all_same && first_ip)    
+        {    
+            // 所有 IP 相同,简化输出    
+            proxy_offset += snprintf(proxy_info + proxy_offset,    
+                            sizeof(proxy_info) - proxy_offset,    
+                            "访问者IP: %s", first_ip);    
+        }    
+        else    
+        {    
+            // IP 不同,显示详细信息    
+            proxy_offset += snprintf(proxy_info + proxy_offset,    
+                            sizeof(proxy_info) - proxy_offset,    
+                            "访问者IP: ");    
+            int has_proxy_header = 0;    
+  
+            if (xff_value[0])    
+            {    
+                proxy_offset += snprintf(proxy_info + proxy_offset,    
+                                sizeof(proxy_info) - proxy_offset,    
+                                "X-Forwarded-For=%s", xff_value);    
+                has_proxy_header = 1;    
+            }    
+  
+            if (xri_value[0])    
+            {    
+                if (has_proxy_header)    
+                    proxy_offset += snprintf(proxy_info + proxy_offset,    
+                                    sizeof(proxy_info) - proxy_offset,    
+                                    ", ");    
+                proxy_offset += snprintf(proxy_info + proxy_offset,    
+                                sizeof(proxy_info) - proxy_offset,    
+                                "X-Real-IP=%s", xri_value);    
+                has_proxy_header = 1;    
+            }    
+  
+            if (cfip_value[0])    
+            {    
+                if (has_proxy_header)    
+                    proxy_offset += snprintf(proxy_info + proxy_offset,    
+                                    sizeof(proxy_info) - proxy_offset,    
+                                    ", ");    
+                proxy_offset += snprintf(proxy_info + proxy_offset,    
+                                sizeof(proxy_info) - proxy_offset,    
+                                "CF-Connecting-IP=%s", cfip_value);    
+            }    
+        }    
+  
+        if (verbose)    
+        {    
+            fprintf(stderr, "[%s] [DEBUG]: %s\n", timestamp(), proxy_info);    
+        }    
+    }  
+  
+    // 解析请求行: GET /api?supernode=host:port HTTP/1.1  
+    char method[16], path[512], version[16];  
+    if (sscanf(request, "%15s %511s %15s", method, path, version) != 3)  
+    {  
+        // 解析失败,返回 400 错误而不是继续处理  
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [WARN]: 请求行解析失败,发送 400 错误\n", timestamp());  
+        }  
+          
+        const char *error_response =   
+            "HTTP/1.1 400 Bad Request\r\n"  
+            "Content-Type: text/plain; charset=utf-8\r\n"  
+            "Connection: close\r\n\r\n"  
+            "Invalid HTTP request";  
+        send(client_sock, error_response, strlen(error_response), 0);  
+        close(client_sock);  
+        return;  
+    }  
+      
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 解析请求: method=%s, path=%s, version=%s\n",  
+                timestamp(), method, path, version);  
+    }  
+  
+    if (strncmp(path, "/api", 4) == 0)  
+    {  
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [DEBUG]: 识别为 API 请求，转发到 handle_api_request()\n", timestamp());  
+        }  
+        handle_api_request(client_sock, path);  
+        return;  
+    }  
+  
+    if (strncmp(path, "/refresh", 8) == 0)  
+    {  
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [DEBUG]: 识别为 立即刷新 请求，转发到 handle_refresh_request()\n", timestamp());  
+        }  
+        handle_refresh_request(client_sock);  
+        return;  
+    }  
+  
+    if (strncmp(path, "/testmy?", 8) == 0)  
+    {  
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [DEBUG]: 识别为 测测我的 请求，转发到 handle_testmy_request()\n", timestamp());  
+        }  
+        handle_testmy_request(client_sock, path);  
+        return;  
+    }  
+  
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: 识别为主页请求，使用缓存响应\n", timestamp());  
+    }  
+  
+    // ========== 使用缓存的 HTML ==========  
+    struct timeval lock_start, lock_acquired;      
+    gettimeofday(&lock_start, NULL);    
+    pthread_rwlock_rdlock(&g_cache_lock);    
+  
+    gettimeofday(&lock_acquired, NULL);      
+    double lock_wait_sec = (lock_acquired.tv_sec - lock_start.tv_sec) +       
+                   (lock_acquired.tv_usec - lock_start.tv_usec) / 1000000.0;      
+  
+    if (lock_wait_sec > 0.05 && verbose)      
+    {      
+        fprintf(stderr, "[%s] [WARN]: 当前访问主页需要等待缓存锁 %.3fs (可能正在更新主页缓存)\n",      
+            timestamp(), lock_wait_sec);      
+    }  
+  
+    if (g_html_cache && g_html_cache_size > 0)  
+    {  
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [DEBUG]: 使用缓存的 HTML (%zu 字节)\n",  
+                    timestamp(), g_html_cache_size);  
+        }  
+  
+        // 检测客户端是否支持 gzip  
+        char *accept_encoding = find_header_value(request, "Accept-Encoding");  
+        int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));  
+  
+        if (supports_gzip)  
+        {  
+            if (verbose)  
+            {  
+                fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());  
+            }  
+            send_compressed_response(client_sock, g_html_cache, g_html_cache_size);  
+        }  
+        else  
+        {  
+            if (verbose)  
+            {  
+                fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());  
+            }  
+            send_chunked_response(client_sock, g_html_cache, g_html_cache_size);  
+        }  
+  
+        pthread_rwlock_unlock(&g_cache_lock);  
+  
+        if (verbose)  
+        {  
+            fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n",  
+                    timestamp(), g_html_cache_size);  
+        }  
+    }  
+    else  
+    {  
+        pthread_rwlock_unlock(&g_cache_lock);  
+  
+        fprintf(stderr, "[%s] [WARN]: HTML 缓存未初始化,使用实时生成\n", timestamp());  
+  
+        // 动态生成代码作为后备  
+        pthread_rwlock_rdlock(&g_state.lock);  
+        size_t base_size = 50000;  
+        size_t per_host_size = 500 + (g_max_history * 50);  
+        size_t buffer_size = base_size + (g_state.host_count * per_host_size) + 10000;  
+  
+        if (buffer_size < 262144)  
+            buffer_size = 262144;  
+        if (buffer_size > 10485760)  
+            buffer_size = 10485760;  
+  
+        int host_count = g_state.host_count;  
+        pthread_rwlock_unlock(&g_state.lock);  
+  
+        char *response = malloc(buffer_size);  
+        if (response)  
+        {  
+            if (verbose)  
+            {  
+                fprintf(stderr, "[%s] [DEBUG]: 分配 %zu 字节缓冲区 (主机数: %d, 历史记录: %d)\n",  
+                        timestamp(), buffer_size, host_count, g_max_history);  
+            }  
+  
+            generate_html(response, buffer_size);  
+            size_t response_len = strlen(response);  
+  
+            char *accept_encoding = find_header_value(request, "Accept-Encoding");  
+            int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));  
+  
+            if (supports_gzip)  
+            {  
+                if (verbose)  
                 {  
-                    if (has_proxy_header)  
-                        proxy_offset += snprintf(proxy_info + proxy_offset,  
-                                        sizeof(proxy_info) - proxy_offset,  
-                                        ", ");  
-                        proxy_offset += snprintf(proxy_info + proxy_offset,  
-                                    sizeof(proxy_info) - proxy_offset,  
-                                    "CF-Connecting-IP=%s", cfip_value);  
+                    fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());  
                 }  
+                send_compressed_response(client_sock, response, response_len);  
+            }  
+            else  
+            {  
+                if (verbose)  
+                {  
+                    fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());  
+                }  
+                send_chunked_response(client_sock, response, response_len);  
             }  
   
             if (verbose)  
             {  
-                fprintf(stderr, "[%s] [DEBUG]: %s\n", timestamp(), proxy_info);  
+                fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n", timestamp(), response_len);  
             }  
-        }
-
-        // 解析请求行: GET /api?supernode=host:port HTTP/1.1
-        char method[16], path[512], version[16];
-        if (sscanf(request, "%15s %511s %15s", method, path, version) == 3)
-        {
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [DEBUG]: 解析请求: method=%s, path=%s, version=%s\n",
-                        timestamp(), method, path, version);
-            }
-
-            if (strncmp(path, "/api", 4) == 0)
-            {
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [DEBUG]: 识别为 API 请求，转发到 handle_api_request()\n", timestamp());
-                }
-                handle_api_request(client_sock, path);
-                return;
-            }
-
-            if (strncmp(path, "/refresh", 8) == 0)
-            {
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [DEBUG]: 识别为 立即刷新 请求，转发到 handle_refresh_request()\n", timestamp());
-                }
-                handle_refresh_request(client_sock);
-                return;
-            }
-
-            // 添加新路由
-            if (strncmp(path, "/testmy?", 8) == 0)
-            {
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [DEBUG]: 识别为 测测我的 请求，转发到 handle_testmy_request()\n", timestamp());
-                }
-                handle_testmy_request(client_sock, path);
-                return;
-            }
-
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [DEBUG]: 识别为主页请求，使用缓存响应\n", timestamp());
-            }
-        }
-        else
-        {
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [DEBUG]: 请求行解析失败\n", timestamp());
-            }
-        }
-
-        // ========== 使用缓存的 HTML ==========
-        struct timeval lock_start, lock_acquired;    
-        gettimeofday(&lock_start, NULL);  
-        pthread_rwlock_rdlock(&g_cache_lock);  
   
-        gettimeofday(&lock_acquired, NULL);    
-        double lock_wait_sec = (lock_acquired.tv_sec - lock_start.tv_sec) +     
-                       (lock_acquired.tv_usec - lock_start.tv_usec) / 1000000.0;    
+            free(response);  
+        }  
+        else  
+        {  
+            if (verbose)  
+            {  
+                fprintf(stderr, "[%s] [ERROR]: 无法分配 %zu 字节缓冲区\n", timestamp(), buffer_size);  
+            }  
+        }  
+    }  
   
-        if (lock_wait_sec > 0.05 && verbose)    
-        {    
-            fprintf(stderr, "[%s] [WARN]: 当前访问主页需要等待缓存锁 %.3fs (可能正在更新主页缓存)\n",    
-                timestamp(), lock_wait_sec);    
-        }
-
-        if (g_html_cache && g_html_cache_size > 0)
-        {
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [DEBUG]: 使用缓存的 HTML (%zu 字节)\n",
-                        timestamp(), g_html_cache_size);
-            }
-
-            // 检测客户端是否支持 gzip
-            char *accept_encoding = find_header_value(request, "Accept-Encoding");
-            int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));
-
-            if (supports_gzip)
-            {
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());
-                }
-                send_compressed_response(client_sock, g_html_cache, g_html_cache_size);
-            }
-            else
-            {
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());
-                }
-                send_chunked_response(client_sock, g_html_cache, g_html_cache_size);
-            }
-
-            pthread_rwlock_unlock(&g_cache_lock);
-
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n",
-                        timestamp(), g_html_cache_size);
-            }
-        }
-        else
-        {
-            pthread_rwlock_unlock(&g_cache_lock);
-
-            // 缓存未初始化,回退到实时生成
-            // if (verbose)
-            // {
-                fprintf(stderr, "[%s] [WARN]: HTML 缓存未初始化,使用实时生成\n", timestamp());
-            // }
-
-            // 动态生成代码作为后备
-            pthread_rwlock_rdlock(&g_state.lock);
-            size_t base_size = 50000;
-            size_t per_host_size = 500 + (g_max_history * 50);
-            size_t buffer_size = base_size + (g_state.host_count * per_host_size) + 10000;
-
-            if (buffer_size < 262144)
-                buffer_size = 262144;
-            if (buffer_size > 10485760)
-                buffer_size = 10485760;
-
-            int host_count = g_state.host_count;
-            pthread_rwlock_unlock(&g_state.lock);
-
-            char *response = malloc(buffer_size);
-            if (response)
-            {
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [DEBUG]: 分配 %zu 字节缓冲区 (主机数: %d, 历史记录: %d)\n",
-                            timestamp(), buffer_size, host_count, g_max_history);
-                }
-
-                generate_html(response, buffer_size);
-                size_t response_len = strlen(response);
-
-                char *accept_encoding = find_header_value(request, "Accept-Encoding");
-                int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));
-
-                if (supports_gzip)
-                {
-                    if (verbose)
-                    {
-                        fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());
-                    }
-                    send_compressed_response(client_sock, response, response_len);
-                }
-                else
-                {
-                    if (verbose)
-                    {
-                        fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());
-                    }
-                    send_chunked_response(client_sock, response, response_len);
-                }
-
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n", timestamp(), response_len);
-                }
-
-                free(response);
-            }
-            else
-            {
-                if (verbose)
-                {
-                    fprintf(stderr, "[%s] [ERROR]: 无法分配 %zu 字节缓冲区\n", timestamp(), buffer_size);
-                }
-            }
-        }
-    }
-    else if (n == 0)
-    {
-        if (verbose)
-        {
-            fprintf(stderr, "[%s] [DEBUG]: 客户端关闭连接\n", timestamp());
-        }
-    }
-    else
-    {
-        if (verbose)
-        {
-            fprintf(stderr, "[%s] [ERROR]: recv() 错误: %s\n", timestamp(), strerror(errno));
-        }
-    }
-
-    close(client_sock);
-    if (verbose)
-    {
-        fprintf(stderr, "[%s] [DEBUG]: HTTP 请求处理完成,连接已关闭\n", timestamp());
-    }
+    close(client_sock);  
+    if (verbose)  
+    {  
+        fprintf(stderr, "[%s] [DEBUG]: HTTP 请求处理完成,连接已关闭\n", timestamp());  
+    }  
 }
 
 // 监控线程
