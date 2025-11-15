@@ -47,6 +47,7 @@ static int g_max_parallel_checks = 5;               // 默认 5 个并行线程�
 static char *g_html_cache = NULL;                   // HTML 缓存
 static size_t g_html_cache_size = 0;                // 缓存大小
 static pthread_rwlock_t g_cache_lock;               // 缓存读写锁
+static int g_http_worker_threads = 0; // HTTP 工作线程数 
 
 static int verbose = 0;
 static char g_community[N2N_COMMUNITY_SIZE] = "N2N_check_bot";
@@ -5667,6 +5668,17 @@ static int calculate_min_interval(int host_count, int parallel_checks)
     return (min_interval_min < 1) ? 1 : min_interval_min;
 }
 
+// 线程处理函数  
+void *handle_client_thread(void *arg)  
+{  
+    int client_sock = *(int *)arg;  
+    free(arg);  
+      
+    handle_http_request(client_sock);  
+      
+    return NULL;  
+}
+
 // 打印帮助信息
 static void print_help(const char *prog_name)
 {
@@ -6070,6 +6082,25 @@ int main(int argc, char *argv[])
                 timestamp(), cpu_cores, g_max_parallel_checks);
     }
 
+    // 设置 HTTP 工作线程数（与并行检测线程使用相同的逻辑）  
+    if (cpu_cores <= 2)  
+    {  
+        g_http_worker_threads = 3;  
+    }  
+    else if (cpu_cores <= 4)  
+    {  
+        g_http_worker_threads = cpu_cores;  
+    }  
+    else  
+    {  
+        g_http_worker_threads = (cpu_cores < 10) ? cpu_cores : 10;  
+    }  
+    if (verbose)
+    { 
+        fprintf(stderr, "[%s] [INFO]: 自动检测到 %d 个 CPU 核心，HTTP 服务将使用最多 %d 个并发线程\n",  
+            timestamp(), cpu_cores, g_http_worker_threads); 
+    }
+
     // 注册信号处理函数
     signal(SIGTERM, signal_handler); // kill 命令
     signal(SIGINT, signal_handler);  // Ctrl+C
@@ -6436,40 +6467,66 @@ int main(int argc, char *argv[])
                 timestamp(), g_community, g_mac[0], g_mac[1], g_mac[2], g_mac[3], g_mac[4], g_mac[5]);
     }
     // 主循环处理 HTTP 请求
-    while (1)
-    {
-        struct sockaddr_storage client_addr;
-        socklen_t client_len = sizeof(client_addr);
-        int client_sock = accept(http_sock, (struct sockaddr *)&client_addr, &client_len);
-
-        if (client_sock >= 0)
-        {
-            if (verbose)
-            {
-                char client_ip[INET6_ADDRSTRLEN];
-                if (client_addr.ss_family == AF_INET)
-                {
-                    inet_ntop(AF_INET, &((struct sockaddr_in *)&client_addr)->sin_addr,
-                              client_ip, sizeof(client_ip));
-                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
-                }
-                else if (client_addr.ss_family == AF_INET6)
-                {
-                    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&client_addr)->sin6_addr,
-                              client_ip, sizeof(client_ip));
-                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
-                }
-            }
-            handle_http_request(client_sock);
-        }
-        else if (errno != EINTR)
-        {
-            if (verbose)
-            {
-                fprintf(stderr, "[%s] [ERROR]: accept() 错误: %s\n", timestamp(), strerror(errno));
-            }
-        }
-    }
-
-    return 0;
+    while (1)  
+    {  
+        struct sockaddr_storage client_addr;  
+        socklen_t client_len = sizeof(client_addr);  
+        int client_sock = accept(http_sock, (struct sockaddr *)&client_addr, &client_len);  
+  
+        if (client_sock >= 0)  
+        {  
+            if (verbose)  
+            {  
+                char client_ip[INET6_ADDRSTRLEN];  
+                if (client_addr.ss_family == AF_INET)  
+                {  
+                    inet_ntop(AF_INET, &((struct sockaddr_in *)&client_addr)->sin_addr,  
+                              client_ip, sizeof(client_ip));  
+                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);  
+                }  
+                else if (client_addr.ss_family == AF_INET6)  
+                {  
+                    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&client_addr)->sin6_addr,  
+                              client_ip, sizeof(client_ip));  
+                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);  
+                }  
+            }  
+              
+            // 为每个连接创建独立线程  
+            int *sock_ptr = malloc(sizeof(int));  
+            if (sock_ptr)  
+            {  
+                *sock_ptr = client_sock;  
+                  
+                pthread_t client_thread;  
+                pthread_attr_t attr;  
+                pthread_attr_init(&attr);  
+                pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);  
+                  
+                if (pthread_create(&client_thread, &attr, handle_client_thread, sock_ptr) != 0)  
+                {  
+                    fprintf(stderr, "[%s] [ERROR]: 无法创建 HTTP 处理线程: %s\n",   
+                            timestamp(), strerror(errno));  
+                    free(sock_ptr);  
+                    handle_http_request(client_sock);  // 回退到同步处理  
+                }  
+                  
+                pthread_attr_destroy(&attr);  
+            }  
+            else  
+            {  
+                fprintf(stderr, "[%s] [ERROR]: 内存分配失败\n", timestamp());  
+                handle_http_request(client_sock);  
+            }  
+        }  
+        else if (errno != EINTR)  
+        {  
+            if (verbose)  
+            {  
+                fprintf(stderr, "[%s] [ERROR]: accept() 错误: %s\n", timestamp(), strerror(errno));  
+            }  
+        }  
+    }  
+      
+    return 0;  
 }
