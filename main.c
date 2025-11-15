@@ -47,7 +47,7 @@ static int g_max_parallel_checks = 5;               // 默认 5 个并行线程�
 static char *g_html_cache = NULL;                   // HTML 缓存
 static size_t g_html_cache_size = 0;                // 缓存大小
 static pthread_rwlock_t g_cache_lock;               // 缓存读写锁
-static int g_http_worker_threads = 0; // HTTP 工作线程数 
+static int g_http_worker_threads = 0;               // HTTP 工作线程数
 
 static int verbose = 0;
 static char g_community[N2N_COMMUNITY_SIZE] = "N2N_check_bot";
@@ -902,7 +902,7 @@ static void add_check_record(host_stats_t *host, int success)
                 timestamp(), host->host, host->port, success, host->history_index, host->history_count);
     }
     host->history[host->history_index].timestamp = time(NULL);
-    host->history[host->history_index].success = success;
+    host->history[host->history_index].success = success ? 1 : 0;
 
     host->history_index = (host->history_index + 1) % host->max_history;
     if (host->history_count < host->max_history)
@@ -2365,13 +2365,15 @@ void generate_html(char *buf, size_t bufsize)
                        ".modal-title{font-size:18px;font-weight:700;color:var(--text);}\n"
                        ".modal-close{background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer;width:32px;height:32px;border-radius:50%%;display:flex;align-items:center;justify-content:center;}\n"
                        ".modal-close:hover{background:#f3f4f6;color:var(--text);}\n"
-                       ".history-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:12px;margin-top:12px;overflow-y:auto;flex:1;}\n"
-                       ".history-item{background:#f9fafb;padding:10px;border-radius:8px;text-align:center;border:1px solid var(--border);transition:all 0.2s;}\n"
-                       ".history-item:hover{background:#f3f4f6;transform:translateY(-2px);box-shadow:0 4px 8px rgba(0,0,0,0.1);}\n"
-                       ".history-item-bar{width:44px;height:44px;border-radius:8px;margin:0 auto 8px;}\n"
-                       ".history-item-time{line-height:1.4;}\n"
-                       ".history-item-date{font-size:10px;font-weight:600;color:var(--muted);}\n"
-                       ".history-item-hour{font-size:14px;font-weight:700;color:#0284c7;}\n"
+                       ".history-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:4px 2px;margin-top:0;overflow-y:auto;flex:1;position:relative;}\n"
+                       ".sticky-date{position:sticky;top:0;z-index:10;grid-column:1/-1;background:rgba(243,244,246,0.95);backdrop-filter:blur(8px);padding:4px 0;margin:0 0 1px 0;font-weight:700;color:var(--text);text-align:center;font-size:13px;white-space:nowrap;border-radius:6px;transition:opacity 0.2s ease;}\n"
+                       ".history-item{background:transparent;padding:0;border-radius:0;text-align:center;transition:all 0.2s;}\n"
+                       ".history-item:hover{transform:translateY(-2px);}\n"
+                       ".history-item-bar{width:56px;height:28px;border-radius:6px;margin:0 auto;position:relative;display:flex;align-items:center;justify-content:center;}\n"
+                       ".history-item-time{font-size:11px;font-weight:700;color:white;text-shadow:0 1px 2px rgba(0,0,0,0.3);}\n"
+                       ".date-separator{grid-column:1/-1;padding:6px 0;font-weight:700;color:var(--text);background:#f3f4f6;border-radius:6px;text-align:center;font-size:13px;margin:4px 0;}\n"
+                       ".sticky-date-container{text-align:center;padding:8px 0;margin-bottom:12px;flex-shrink:0;}\n"
+                       ".sticky-date{display:inline-block;background:#f3f4f6;padding:6px 16px;border-radius:6px;font-weight:700;color:var(--text);font-size:14px;white-space:nowrap;}\n"
                        ".toast{position:fixed;top:18px;right:18px;color:white;padding:12px 16px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.3);z-index:1002;font-weight:600;font-size:14px;transform:translateX(400px);opacity:0;transition:transform 0.3s cubic-bezier(0.68,-0.55,0.265,1.55),opacity 0.3s ease;}\n"
                        ".toast.show{transform:translateX(0);opacity:1;}\n"
                        ".toast.hide{transform:translateX(400px);opacity:0;}\n"
@@ -2416,8 +2418,8 @@ void generate_html(char *buf, size_t bufsize)
                        ".blink-highlight {\n"
                        "  animation: blink-red 0.6s ease-in-out 5;\n" // 闪烁5次
                        "}\n"
-                       "@media (max-width:900px){.container{padding:12px}.stat{min-width:auto;padding:6px 12px;}.host-cell{font-size:14px}.progress-container{height:20px}.history-item-bar{width:36px;height:36px}}\n"
-                       "@media (max-width:640px){thead th{font-size:12px;padding:8px;}tbody td{padding:8px;}table{min-width:640px}}\n"
+                       "@media (max-width:900px){.container{padding:12px}.stat{min-width:auto;padding:6px 12px;}.host-cell{font-size:14px}.progress-container{height:20px}.modal-content{max-width:96%%;width:96%%;max-height:85vh;padding:12px;}.modal-header{margin-bottom:10px;padding-bottom:8px;}.modal-title{font-size:15px;}.history-grid{gap:3px 1px;grid-template-columns:repeat(auto-fill,minmax(50px,1fr));}.history-item-bar{width:48px;height:24px;}.history-item-time{font-size:10px;}.sticky-date{font-size:12px;padding:3px 0;display:block;}}\n"
+                       "@media (max-width:640px){thead th{font-size:12px;padding:8px;}tbody td{padding:8px;}table{min-width:640px}.modal-content{max-width:98%%;width:98%%;max-height:80vh;padding:10px;border-radius:8px;}.modal-header{margin-bottom:8px;padding-bottom:6px;}.modal-header>div:first-child{display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:100%%;}.modal-title{font-size:14px;}.history-grid{gap:2px 1px;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));}.history-item-bar{width:44px;height:22px;}.history-item-time{font-size:9px;}.sticky-date{font-size:11px;padding:2px 0;display:block;}}\n"
                        "@media (prefers-reduced-motion: reduce){*{transition:none!important}}\n"
                        "</style>\n"
                        "<script>\n"
@@ -2557,7 +2559,7 @@ void generate_html(char *buf, size_t bufsize)
                        "  // 生成HTML\n"
                        "  for (var i = 0; i < displayRecords.length; i++) {\n"
                        "    var record = displayRecords[i];\n"
-                       "    var status = record.status ? 'history-online' : 'history-offline';\n"
+                       "    var status = record.status == 1 ? 'history-online' : 'history-offline';\n"
                        "    html += '<div class=\"history-bar ' + status + '\"></div>';\n"
                        "  }\n"
                        "  \n"
@@ -2620,10 +2622,15 @@ void generate_html(char *buf, size_t bufsize)
                        "  html += '<option value=\"online\">只看在线</option>';\n"
                        "  html += '<option value=\"offline\">只看离线</option>';\n"
                        "  html += '</select>';\n"
+                       "  html += '<select id=\"historySortOrder\" onchange=\"sortHistoryRecords()\" style=\"padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:white;color:var(--text);font-size:12px;cursor:pointer;margin-left:8px;\">';\n"
+                       "  html += '<option value=\"desc\">从新到旧</option>';\n"
+                       "  html += '<option value=\"asc\">从旧到新</option>';\n"
+                       "  html += '</select>';\n"
                        "  html += '</div>';\n"
                        "  html += '<button class=\"modal-close\" onclick=\"closeHistoryModal()\">×</button>';\n"
                        "  html += '</div>';\n"
-                       "  html += '<div class=\"history-grid\">';\n"
+                       "  html += '<div class=\"history-grid\" id=\"historyScrollContainer\">';\n"
+                       "  html += '<div class=\"sticky-date\" id=\"stickyDateDisplay\"></div>';\n"
                        "  \n"
                        "  // 使用共享函数获取排序后的记录\n"
                        "  var sortedRecords = processHistoryData(historyData);\n"
@@ -2657,12 +2664,9 @@ void generate_html(char *buf, size_t bufsize)
                        "    var statusText = record.status ? '在线' : '离线';\n"
                        "    var statusClass = record.status ? 'online' : 'offline';\n"
                        "    \n"
-                       "    // 添加 data-status 属性用于筛选\n"
-                       "    html += '<div class=\"history-item\" data-status=\"' + statusClass + '\" title=\"' + fullDateStr + ' ' + statusText + '\">';\n"
-                       "    html += '<div class=\"history-item-bar ' + statusClass + '\" style=\"background:' + (record.status ? 'linear-gradient(90deg,#34d399,#10b981)' : 'linear-gradient(90deg,#fb7185,#ef4444)') + '\"></div>';\n"
-                       "    html += '<div class=\"history-item-time\">';\n"
-                       "    html += '<div class=\"history-item-date\">' + dateStr + '</div>';\n"
-                       "    html += '<div class=\"history-item-hour\">' + timeStr + '</div>';\n"
+                       "    html += '<div class=\"history-item\" data-status=\"' + (record.status == 1 ? 'online' : 'offline') + '\" title=\"' + fullDateStr + ' ' + statusText + '\">';\n"
+                       "    html += '<div class=\"history-item-bar\" data-timestamp=\"' + record.timestamp + '\" style=\"background:' + (record.status == 1 ? 'linear-gradient(90deg,#34d399,#10b981)' : 'linear-gradient(90deg,#fb7185,#ef4444)') + '\">';\n"
+                       "    html += '<div class=\"history-item-time\">' + timeStr + '</div>';\n"
                        "    html += '</div>';\n"
                        "    html += '</div>';\n"
                        "  }\n"
@@ -2670,6 +2674,85 @@ void generate_html(char *buf, size_t bufsize)
                        "  html += '</div></div>';\n"
                        "  modal.innerHTML = html;\n"
                        "  modal.className = 'modal-overlay active';\n"
+                       "  \n"
+                       "  // 禁用背景页面滚动\n"
+                       "  document.body.style.overflow = 'hidden';\n"
+                       "  \n"
+                       "  // 滚动监听:更新粘性日期标题\n"
+                       "  var scrollContainer = document.getElementById('historyScrollContainer');\n"
+                       "  var stickyDateDisplay = document.getElementById('stickyDateDisplay');\n"
+                       "  \n"
+                       "  scrollContainer.addEventListener('scroll', function() {\n"
+                       "    var stickyDateDisplay = document.getElementById('stickyDateDisplay');\n" // 每次都重新获取
+                       "    if (!stickyDateDisplay) return;\n"                                       // 如果元素不存在,直接返回
+                       "    \n"
+                       "    var separators = scrollContainer.querySelectorAll('.date-separator');\n"
+                       "    var containerTop = scrollContainer.getBoundingClientRect().top;\n"
+                       "    var currentDate = '';\n"
+                       "    var currentSeparatorVisible = false;\n"
+                       "    var sortOrder = scrollContainer.getAttribute('data-sort-order') || 'desc';\n"
+                       "    \n"
+                       "    if (sortOrder === 'asc') {\n"
+                       "      // 从旧到新:从后往前遍历\n"
+                       "      for (var i = separators.length - 1; i >= 0; i--) {\n"
+                       "        var rect = separators[i].getBoundingClientRect();\n"
+                       "        \n"
+                       "        if (rect.top >= containerTop && rect.top <= containerTop + 50) {\n"
+                       "          currentSeparatorVisible = true;\n"
+                       "        }\n"
+                       "        \n"
+                       "        if (rect.top <= containerTop + 40) {\n"
+                       "          currentDate = separators[i].textContent;\n"
+                       "          break;\n"
+                       "        }\n"
+                       "      }\n"
+                       "    } else {\n"
+                       "      // 从新到旧:从前往后遍历\n"
+                       "      for (var i = 0; i < separators.length; i++) {\n"
+                       "        var rect = separators[i].getBoundingClientRect();\n"
+                       "        \n"
+                       "        if (rect.top >= containerTop && rect.top <= containerTop + 50) {\n"
+                       "          currentSeparatorVisible = true;\n"
+                       "        }\n"
+                       "        \n"
+                       "        if (rect.top <= containerTop + 40) {\n"
+                       "          currentDate = separators[i].textContent;\n"
+                       "        } else {\n"
+                       "          break;\n"
+                       "        }\n"
+                       "      }\n"
+                       "    }\n"
+                       "    \n"
+                       "    if (currentSeparatorVisible || scrollContainer.scrollTop <= 5) {\n"
+                       "      stickyDateDisplay.style.opacity = '0';\n"
+                       "      stickyDateDisplay.style.visibility = 'hidden';\n"
+                       "      stickyDateDisplay.style.height = '0';\n"
+                       "      stickyDateDisplay.style.padding = '0';\n"
+                       "      stickyDateDisplay.style.margin = '0';\n"
+                       "    } else if (currentDate) {\n"
+                       "      stickyDateDisplay.textContent = currentDate;\n"
+                       "      stickyDateDisplay.style.opacity = '1';\n"
+                       "      stickyDateDisplay.style.visibility = 'visible';\n"
+                       "      stickyDateDisplay.style.height = '';\n"
+                       "      stickyDateDisplay.style.padding = '4px 0';\n"
+                       "      stickyDateDisplay.style.margin = '0 0 1px 0';\n"
+                       "    }\n"
+                       "  });\n"
+                       "  \n"
+                       "  // 初始化隐藏粘性标题\n"
+                       "  stickyDateDisplay.style.opacity = '0';\n"
+                       "  stickyDateDisplay.style.visibility = 'hidden';\n"
+                       "  stickyDateDisplay.style.height = '0';\n"
+                       "  stickyDateDisplay.style.padding = '0';\n"
+                       "  stickyDateDisplay.style.margin = '0';\n"
+                       "  \n"
+                       "  // 滚动到顶部\n"
+                       "  setTimeout(function() {\n"
+                       "    var scrollContainer = document.getElementById('historyScrollContainer');\n"
+                       "    if (scrollContainer) {\n"
+                       "      scrollContainer.scrollTop = 0;\n"
+                       "    }\n"
+                       "  }, 10);\n"
                        "  \n"
                        "  // 点击背景关闭\n"
                        "  modal.onclick = function() { closeHistoryModal(); };\n"
@@ -2680,6 +2763,8 @@ void generate_html(char *buf, size_t bufsize)
                        "  if (modal) {\n"
                        "    modal.className = 'modal-overlay';\n"
                        "  }\n"
+                       "  // 恢复背景页面滚动\n"
+                       "  document.body.style.overflow = '';\n"
                        "}\n"
                        "var selectedDate = null;\n"
                        "var availableDates = {};\n"
@@ -2706,6 +2791,8 @@ void generate_html(char *buf, size_t bufsize)
                        "  renderDatePicker(now.getFullYear(), now.getMonth(), host, port, historyData);\n"
                        "  picker.className = 'date-picker-overlay active';\n"
                        "  picker.onclick = function(e) { if (e.target === picker) closeDatePicker(); };\n"
+                       "  // 禁用背景页面滚动\n"
+                       "  document.body.style.overflow = 'hidden';\n"
                        "}\n"
                        "\n"
                        "function renderDatePicker(year, month, host, port, historyData) {\n"
@@ -2931,6 +3018,64 @@ void generate_html(char *buf, size_t bufsize)
                        "    // 如果该日期下没有可见项,隐藏日期分隔符\n"
                        "    separator.style.display = hasVisibleItems ? '' : 'none';\n"
                        "  });\n"
+                       "}\n"
+                       "function sortHistoryRecords() {\n"
+                       "  var sortOrder = document.getElementById('historySortOrder').value;\n"
+                       "  var modal = document.getElementById('historyModal');\n"
+                       "  var scrollContainer = modal.querySelector('.history-grid');\n"
+                       "  \n"
+                       "  // 获取当前 DOM 的排序状态\n"
+                       "  var currentOrder = scrollContainer.getAttribute('data-sort-order') || 'desc';\n"
+                       "  \n"
+                       "  // 如果选择的排序与当前状态相同,不执行任何操作\n"
+                       "  if (sortOrder === currentOrder) {\n"
+                       "    return;\n"
+                       "  }\n"
+                       "  \n"
+                       "  var stickyDate = document.getElementById('stickyDateDisplay');\n"
+                       "  var stickyDateElement = stickyDate ? stickyDate.cloneNode(true) : null;\n"
+                       "  \n"
+                       "  var allElements = Array.from(scrollContainer.children);\n"
+                       "  var dateGroups = [];\n"
+                       "  var currentGroup = null;\n"
+                       "  \n"
+                       "  for (var i = 0; i < allElements.length; i++) {\n"
+                       "    var elem = allElements[i];\n"
+                       "    if (elem.classList.contains('sticky-date')) {\n"
+                       "      continue;\n"
+                       "    }\n"
+                       "    if (elem.classList.contains('date-separator')) {\n"
+                       "      if (currentGroup) dateGroups.push(currentGroup);\n"
+                       "      currentGroup = { separator: elem, items: [] };\n"
+                       "    } else if (elem.classList.contains('history-item') && currentGroup) {\n"
+                       "      currentGroup.items.push(elem);\n"
+                       "    }\n"
+                       "  }\n"
+                       "  if (currentGroup) dateGroups.push(currentGroup);\n"
+                       "  \n"
+                       "  scrollContainer.innerHTML = '';\n"
+                       "  \n"
+                       "  if (stickyDateElement) {\n"
+                       "    scrollContainer.appendChild(stickyDateElement);\n"
+                       "  }\n"
+                       "  \n"
+                       "  // 关键修改:无论选择哪个排序,都执行反转操作\n"
+                       "  // 因为我们知道当前状态与目标状态不同\n"
+                       "  dateGroups.reverse();\n"
+                       "  for (var i = 0; i < dateGroups.length; i++) {\n"
+                       "    var group = dateGroups[i];\n"
+                       "    scrollContainer.appendChild(group.separator);\n"
+                       "    group.items.reverse();\n"
+                       "    for (var j = 0; j < group.items.length; j++) {\n"
+                       "      scrollContainer.appendChild(group.items[j]);\n"
+                       "    }\n"
+                       "  }\n"
+                       "  \n"
+                       "  // 更新 DOM 的排序状态标记\n"
+                       "  scrollContainer.setAttribute('data-sort-order', sortOrder);\n"
+                       "  \n"
+                       "  filterHistoryByStatus();\n"
+                       "  scrollContainer.scrollTop = 0;\n"
                        "}\n"
                        "function scrollToAllOfflineHosts() {\n"
                        "  if (!window.offlineHostsList || window.offlineHostsList.length === 0) return;\n"
@@ -3172,42 +3317,42 @@ void generate_html(char *buf, size_t bufsize)
             // 构建版本徽章
             char version_badges[256] = "";
             int has_any_version = 0;
-            int badge_offset = 0; 
+            int badge_offset = 0;
 
             if (h->success_v1 > 0)
-            {  
-                badge_offset += snprintf(version_badges + badge_offset,   
-                            sizeof(version_badges) - badge_offset,  
-                            "<span class='version-badge badge-v1'>v1</span>");  
-                has_any_version = 1;  
+            {
+                badge_offset += snprintf(version_badges + badge_offset,
+                                         sizeof(version_badges) - badge_offset,
+                                         "<span class='version-badge badge-v1'>v1</span>");
+                has_any_version = 1;
             }
-            if (h->success_v2 > 0)  
-            {  
-                badge_offset += snprintf(version_badges + badge_offset,  
-                            sizeof(version_badges) - badge_offset,  
-                            "<span class='version-badge badge-v2'>v2</span>");  
-                has_any_version = 1;  
-            }  
-            if (h->success_v2s > 0)  
-            {  
-                badge_offset += snprintf(version_badges + badge_offset,  
-                            sizeof(version_badges) - badge_offset,  
-                            "<span class='version-badge badge-v2s'>v2s</span>");  
-                has_any_version = 1;  
-            }  
-            if (h->success_v3 > 0)  
-            {  
-                badge_offset += snprintf(version_badges + badge_offset,  
-                            sizeof(version_badges) - badge_offset,  
-                            "<span class='version-badge badge-v3'>v3</span>");  
-                has_any_version = 1;  
-            }  
-            if (!has_any_version)  
-            {  
-                snprintf(version_badges, sizeof(version_badges),  
-                            "<span class='version-badge badge-unknown'>未知</span>");  
+            if (h->success_v2 > 0)
+            {
+                badge_offset += snprintf(version_badges + badge_offset,
+                                         sizeof(version_badges) - badge_offset,
+                                         "<span class='version-badge badge-v2'>v2</span>");
+                has_any_version = 1;
             }
-            
+            if (h->success_v2s > 0)
+            {
+                badge_offset += snprintf(version_badges + badge_offset,
+                                         sizeof(version_badges) - badge_offset,
+                                         "<span class='version-badge badge-v2s'>v2s</span>");
+                has_any_version = 1;
+            }
+            if (h->success_v3 > 0)
+            {
+                badge_offset += snprintf(version_badges + badge_offset,
+                                         sizeof(version_badges) - badge_offset,
+                                         "<span class='version-badge badge-v3'>v3</span>");
+                has_any_version = 1;
+            }
+            if (!has_any_version)
+            {
+                snprintf(version_badges, sizeof(version_badges),
+                         "<span class='version-badge badge-unknown'>未知</span>");
+            }
+
             // 计算该主机的连通率(基于历史记录)
             float overall_rate = calculate_uptime(h);
 
@@ -3216,7 +3361,11 @@ void generate_html(char *buf, size_t bufsize)
             if (h->last_check > 0)
             {
                 time_t elapsed = now - h->last_check;
-                if (elapsed < 60)
+                if (elapsed < 5)
+                {
+                    snprintf(last_check_str, sizeof(last_check_str), "刚刚");
+                }
+                else if (elapsed < 60)
                 {
                     snprintf(last_check_str, sizeof(last_check_str), "%ld秒前", elapsed);
                 }
@@ -3408,107 +3557,107 @@ void generate_html(char *buf, size_t bufsize)
     pthread_rwlock_unlock(&g_state.lock);
 }
 
-void update_html_cache(void)  
-{  
-    struct timeval start_time, end_time;    
-    gettimeofday(&start_time, NULL);  
-      
-    if (verbose)  
-    {  
-        fprintf(stderr, "[%s] [DEBUG]: 开始更新 HTML 缓存\n", timestamp());  
-    }  
-  
-    // 计算所需缓冲区大小  
-    pthread_rwlock_rdlock(&g_state.lock);  
-    size_t base_size = 50000;  
-    size_t per_host_size = 500 + (g_max_history * 50);  
-    size_t buffer_size = base_size + (g_state.host_count * per_host_size) + 10000;  
-  
-    if (buffer_size < 262144)  
-        buffer_size = 262144;  
-    if (buffer_size > 10485760)  
-        buffer_size = 10485760;  
-  
-    int host_count = g_state.host_count;  
-    pthread_rwlock_unlock(&g_state.lock);  
-  
-    // 分配临时缓冲区  
-    struct timeval alloc_start;    
-    gettimeofday(&alloc_start, NULL);   
-    char *temp_buffer = malloc(buffer_size);  
-      
-    if (!temp_buffer)  
-    {  
-        fprintf(stderr, "[%s] [ERROR]: 无法分配 %zu 字节缓存缓冲区\n",  
-                timestamp(), buffer_size);  
-        return;  
-    }  
-  
-    struct timeval alloc_end;    
-    gettimeofday(&alloc_end, NULL);    
-    double alloc_sec = (alloc_end.tv_sec - alloc_start.tv_sec) +     
-                       (alloc_end.tv_usec - alloc_start.tv_usec) / 1000000.0;    
-    
-    // 生成 HTML    
-    struct timeval gen_start;    
-    gettimeofday(&gen_start, NULL);    
-        
-    generate_html(temp_buffer, buffer_size);    
-    size_t html_len = strlen(temp_buffer);    
-        
-    struct timeval gen_end;    
-    gettimeofday(&gen_end, NULL);    
-    double gen_sec = (gen_end.tv_sec - gen_start.tv_sec) +     
-                     (gen_end.tv_usec - gen_start.tv_usec) / 1000000.0;    
-    
-    // 更新全局缓存    
-    struct timeval lock_start;    
-    gettimeofday(&lock_start, NULL);    
-        
-    pthread_rwlock_wrlock(&g_cache_lock);    
-        
-    struct timeval lock_acquired;    
-    gettimeofday(&lock_acquired, NULL);    
-    double lock_wait_sec = (lock_acquired.tv_sec - lock_start.tv_sec) +     
-                           (lock_acquired.tv_usec - lock_start.tv_usec) / 1000000.0;    
-    
-    // 释放旧缓存    
-    if (g_html_cache)    
-    {    
-        free(g_html_cache);    
-    }    
-    
-    // 设置新缓存    
-    g_html_cache = temp_buffer;    
-    g_html_cache_size = html_len;    
-    
-    pthread_rwlock_unlock(&g_cache_lock);    
-    
-    gettimeofday(&end_time, NULL);    
-    double total_sec = (end_time.tv_sec - start_time.tv_sec) +     
-                       (end_time.tv_usec - start_time.tv_usec) / 1000000.0;    
-      
-    if (verbose)  
-    {  
-        // 输出详细性能日志    
-        fprintf(stderr, "[%s] [PERF]: HTML 主页缓存更新完成 - 总耗时: %.3fs "    
-            "(内存分配: %.3fs, HTML生成: %.3fs, 锁等待: %.3fs) | "    
-            "缓存大小: %zu 字节, 主机数: %d, 历史记录: %d条/主机\n",    
-            timestamp(), total_sec, alloc_sec, gen_sec, lock_wait_sec,    
-            html_len, host_count, g_max_history);    
-    }  
-        
-    // 性能警告    
-    if (total_sec > 1.0)    
-    {    
-        fprintf(stderr, "[%s] [WARN]: 主页缓存更新耗时过长 (%.3fs)，建议减少历史记录数量 (-j 参数)\n",    
-                timestamp(), total_sec);    
-    }    
-    if (lock_wait_sec > 0.1)    
-    {    
-        fprintf(stderr, "[%s] [WARN]: 主页缓存更新出现锁等待时间过长 (%.3fs)，可能存在锁竞争\n",    
-                timestamp(), lock_wait_sec);    
-    }    
+void update_html_cache(void)
+{
+    struct timeval start_time, end_time;
+    gettimeofday(&start_time, NULL);
+
+    if (verbose)
+    {
+        fprintf(stderr, "[%s] [DEBUG]: 开始更新 HTML 缓存\n", timestamp());
+    }
+
+    // 计算所需缓冲区大小
+    pthread_rwlock_rdlock(&g_state.lock);
+    size_t base_size = 50000;
+    size_t per_host_size = 500 + (g_max_history * 50);
+    size_t buffer_size = base_size + (g_state.host_count * per_host_size) + 10000;
+
+    if (buffer_size < 262144)
+        buffer_size = 262144;
+    if (buffer_size > 10485760)
+        buffer_size = 10485760;
+
+    int host_count = g_state.host_count;
+    pthread_rwlock_unlock(&g_state.lock);
+
+    // 分配临时缓冲区
+    struct timeval alloc_start;
+    gettimeofday(&alloc_start, NULL);
+    char *temp_buffer = malloc(buffer_size);
+
+    if (!temp_buffer)
+    {
+        fprintf(stderr, "[%s] [ERROR]: 无法分配 %zu 字节缓存缓冲区\n",
+                timestamp(), buffer_size);
+        return;
+    }
+
+    struct timeval alloc_end;
+    gettimeofday(&alloc_end, NULL);
+    double alloc_sec = (alloc_end.tv_sec - alloc_start.tv_sec) +
+                       (alloc_end.tv_usec - alloc_start.tv_usec) / 1000000.0;
+
+    // 生成 HTML
+    struct timeval gen_start;
+    gettimeofday(&gen_start, NULL);
+
+    generate_html(temp_buffer, buffer_size);
+    size_t html_len = strlen(temp_buffer);
+
+    struct timeval gen_end;
+    gettimeofday(&gen_end, NULL);
+    double gen_sec = (gen_end.tv_sec - gen_start.tv_sec) +
+                     (gen_end.tv_usec - gen_start.tv_usec) / 1000000.0;
+
+    // 更新全局缓存
+    struct timeval lock_start;
+    gettimeofday(&lock_start, NULL);
+
+    pthread_rwlock_wrlock(&g_cache_lock);
+
+    struct timeval lock_acquired;
+    gettimeofday(&lock_acquired, NULL);
+    double lock_wait_sec = (lock_acquired.tv_sec - lock_start.tv_sec) +
+                           (lock_acquired.tv_usec - lock_start.tv_usec) / 1000000.0;
+
+    // 释放旧缓存
+    if (g_html_cache)
+    {
+        free(g_html_cache);
+    }
+
+    // 设置新缓存
+    g_html_cache = temp_buffer;
+    g_html_cache_size = html_len;
+
+    pthread_rwlock_unlock(&g_cache_lock);
+
+    gettimeofday(&end_time, NULL);
+    double total_sec = (end_time.tv_sec - start_time.tv_sec) +
+                       (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+
+    if (verbose)
+    {
+        // 输出详细性能日志
+        fprintf(stderr, "[%s] [PERF]: HTML 主页缓存更新完成 - 总耗时: %.3fs "
+                        "(内存分配: %.3fs, HTML生成: %.3fs, 锁等待: %.3fs) | "
+                        "缓存大小: %zu 字节, 主机数: %d, 历史记录: %d条/主机\n",
+                timestamp(), total_sec, alloc_sec, gen_sec, lock_wait_sec,
+                html_len, host_count, g_max_history);
+    }
+
+    // 性能警告
+    if (total_sec > 1.0)
+    {
+        fprintf(stderr, "[%s] [WARN]: 主页缓存更新耗时过长 (%.3fs)，建议减少历史记录数量 (-j 参数)\n",
+                timestamp(), total_sec);
+    }
+    if (lock_wait_sec > 0.1)
+    {
+        fprintf(stderr, "[%s] [WARN]: 主页缓存更新出现锁等待时间过长 (%.3fs)，可能存在锁竞争\n",
+                timestamp(), lock_wait_sec);
+    }
 }
 
 // 不区分大小写查找请求头
@@ -4316,39 +4465,39 @@ static void call_status_change_script(host_stats_t *h, int is_online,
     char versions[64] = "";
     int has_version = 0;
     int version_offset = 0;
-    if (v1_ok)  
-    {  
-        version_offset += snprintf(versions + version_offset,  
-                              sizeof(versions) - version_offset,  
-                              "v1 ");  
-        has_version = 1;  
-    }  
-    if (v2_ok)  
-    {  
-        version_offset += snprintf(versions + version_offset,  
-                              sizeof(versions) - version_offset,  
-                              "v2 ");  
-        has_version = 1;  
-    }  
-    if (v2s_ok)  
-    {  
-        version_offset += snprintf(versions + version_offset,  
-                              sizeof(versions) - version_offset,  
-                              "v2s ");  
-        has_version = 1;  
-    }  
-    if (v3_ok)  
-    {  
-        version_offset += snprintf(versions + version_offset,  
-                              sizeof(versions) - version_offset,  
-                              "v3 ");  
-        has_version = 1;  
-    }  
-  
-    // 如果没有检测到任何版本,使用占位符  
-    if (!has_version)  
-    {  
-        snprintf(versions, sizeof(versions), "Unknown");  
+    if (v1_ok)
+    {
+        version_offset += snprintf(versions + version_offset,
+                                   sizeof(versions) - version_offset,
+                                   "v1 ");
+        has_version = 1;
+    }
+    if (v2_ok)
+    {
+        version_offset += snprintf(versions + version_offset,
+                                   sizeof(versions) - version_offset,
+                                   "v2 ");
+        has_version = 1;
+    }
+    if (v2s_ok)
+    {
+        version_offset += snprintf(versions + version_offset,
+                                   sizeof(versions) - version_offset,
+                                   "v2s ");
+        has_version = 1;
+    }
+    if (v3_ok)
+    {
+        version_offset += snprintf(versions + version_offset,
+                                   sizeof(versions) - version_offset,
+                                   "v3 ");
+        has_version = 1;
+    }
+
+    // 如果没有检测到任何版本,使用占位符
+    if (!has_version)
+    {
+        snprintf(versions, sizeof(versions), "Unknown");
     }
 
     // 构建主机标识 - 使用真实主机名(h->host),不使用隐私名(display_name)
@@ -5006,378 +5155,378 @@ void handle_testmy_request(int client_sock, const char *path)
 }
 
 // HTTP 请求处理
-void handle_http_request(int client_sock)  
-{  
-    if (verbose)  
-    {  
-        fprintf(stderr, "[%s] [DEBUG]: 开始处理 HTTP 请求 (socket fd=%d)\n", timestamp(), client_sock);  
-    }  
-      
-    char request[8192] = {0};  // 增大缓冲区到 8KB  
-    ssize_t total_received = 0;  
-    int header_complete = 0;  
-      
-    // 设置接收超时(5秒)  
-    struct timeval timeout;  
-    timeout.tv_sec = 5;  
-    timeout.tv_usec = 0;  
-    setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));  
-      
-    // 循环接收直到获得完整的 HTTP 头部  
-    while (total_received < (ssize_t)sizeof(request) - 1)  
-    {  
-        ssize_t n = recv(client_sock, request + total_received,   
-                        sizeof(request) - total_received - 1, 0);  
-          
-        if (n > 0)  
-        {  
-            total_received += n;  
-            request[total_received] = '\0';  
-              
-            // 检查是否收到完整的 HTTP 头部(以 \r\n\r\n 结束)  
-            if (strstr(request, "\r\n\r\n") != NULL)  
-            {  
-                header_complete = 1;  
-                break;  
-            }  
-        }  
-        else if (n == 0)  
-        {  
-            // 客户端关闭连接  
-            if (verbose)  
-            {  
-                fprintf(stderr, "[%s] [DEBUG]: 客户端在发送完整请求前关闭连接\n", timestamp());  
-            }  
-            close(client_sock);  
-            return;  
-        }  
-        else  
-        {  
-            // 接收错误或超时  
-            if (errno == EAGAIN || errno == EWOULDBLOCK)  
-            {  
-                if (verbose)  
-                {  
-                    fprintf(stderr, "[%s] [WARN]: 接收 HTTP 请求超时(已接收 %zd 字节)\n",   
-                            timestamp(), total_received);  
-                }  
-            }  
-            else  
-            {  
-                if (verbose)  
-                {  
-                    fprintf(stderr, "[%s] [ERROR]: recv() 错误: %s\n", timestamp(), strerror(errno));  
-                }  
-            }  
-            close(client_sock);  
-            return;  
-        }  
-    }  
-      
-    if (!header_complete)  
-    {  
-        if (verbose)  
-        {  
-            fprintf(stderr, "[%s] [WARN]: HTTP 请求头部不完整,缓冲区已满\n", timestamp());  
-        }  
-        close(client_sock);  
-        return;  
-    }  
-      
-    if (verbose)  
-    {  
-        fprintf(stderr, "[%s] [DEBUG]: 接收到完整 HTTP 请求 (%zd 字节)\n", timestamp(), total_received);  
-    }  
-  
-    // 查找代理请求头  
-    char *xff = find_header_value(request, "X-Forwarded-For");  
-    char *xri = find_header_value(request, "X-Real-IP");  
-    char *cfip = find_header_value(request, "CF-Connecting-IP");  
-  
-    // 提取所有请求头的 IP 值    
-    char xff_value[256] = {0};    
-    char xri_value[256] = {0};    
-    char cfip_value[256] = {0};    
-  
-    if (xff)    
-    {    
-        sscanf(xff, "%255[^\r\n]", xff_value);    
-    }    
-    if (xri)    
-    {    
-        sscanf(xri, "%255[^\r\n]", xri_value);    
-    }    
-    if (cfip)    
-    {    
-        sscanf(cfip, "%255[^\r\n]", cfip_value);    
-    }    
-  
-    // 构建合并的消息    
-    char proxy_info[2048] = {0};    
-    int proxy_offset = 0;    
-  
-    if (xff || xri || cfip)    
-    {    
-        // 确定第一个非空的 IP 值    
-        char *first_ip = NULL;    
-        if (xff_value[0])    
-            first_ip = xff_value;    
-        else if (xri_value[0])    
-            first_ip = xri_value;    
-        else if (cfip_value[0])    
-            first_ip = cfip_value;    
-  
-        // 检查是否所有非空值都相同    
-        int all_same = 1;    
-        if (first_ip)    
-        {    
-            if (xff_value[0] && strcmp(xff_value, first_ip) != 0)    
-                all_same = 0;    
-            if (xri_value[0] && strcmp(xri_value, first_ip) != 0)    
-                all_same = 0;    
-            if (cfip_value[0] && strcmp(cfip_value, first_ip) != 0)    
-                all_same = 0;    
-        }    
-  
-        if (all_same && first_ip)    
-        {    
-            // 所有 IP 相同,简化输出    
-            proxy_offset += snprintf(proxy_info + proxy_offset,    
-                            sizeof(proxy_info) - proxy_offset,    
-                            "访问者IP: %s", first_ip);    
-        }    
-        else    
-        {    
-            // IP 不同,显示详细信息    
-            proxy_offset += snprintf(proxy_info + proxy_offset,    
-                            sizeof(proxy_info) - proxy_offset,    
-                            "访问者IP: ");    
-            int has_proxy_header = 0;    
-  
-            if (xff_value[0])    
-            {    
-                proxy_offset += snprintf(proxy_info + proxy_offset,    
-                                sizeof(proxy_info) - proxy_offset,    
-                                "X-Forwarded-For=%s", xff_value);    
-                has_proxy_header = 1;    
-            }    
-  
-            if (xri_value[0])    
-            {    
-                if (has_proxy_header)    
-                    proxy_offset += snprintf(proxy_info + proxy_offset,    
-                                    sizeof(proxy_info) - proxy_offset,    
-                                    ", ");    
-                proxy_offset += snprintf(proxy_info + proxy_offset,    
-                                sizeof(proxy_info) - proxy_offset,    
-                                "X-Real-IP=%s", xri_value);    
-                has_proxy_header = 1;    
-            }    
-  
-            if (cfip_value[0])    
-            {    
-                if (has_proxy_header)    
-                    proxy_offset += snprintf(proxy_info + proxy_offset,    
-                                    sizeof(proxy_info) - proxy_offset,    
-                                    ", ");    
-                proxy_offset += snprintf(proxy_info + proxy_offset,    
-                                sizeof(proxy_info) - proxy_offset,    
-                                "CF-Connecting-IP=%s", cfip_value);    
-            }    
-        }    
-  
-        if (verbose)    
-        {    
-            fprintf(stderr, "[%s] [DEBUG]: %s\n", timestamp(), proxy_info);    
-        }    
-    }  
-  
-    // 解析请求行: GET /api?supernode=host:port HTTP/1.1  
-    char method[16], path[512], version[16];  
-    if (sscanf(request, "%15s %511s %15s", method, path, version) != 3)  
-    {  
-        // 解析失败,返回 400 错误而不是继续处理  
-        if (verbose)  
-        {  
-            fprintf(stderr, "[%s] [WARN]: 请求行解析失败,发送 400 错误\n", timestamp());  
-        }  
-          
-        const char *error_response =   
-            "HTTP/1.1 400 Bad Request\r\n"  
-            "Content-Type: text/plain; charset=utf-8\r\n"  
-            "Connection: close\r\n\r\n"  
-            "Invalid HTTP request";  
-        send(client_sock, error_response, strlen(error_response), 0);  
-        close(client_sock);  
-        return;  
-    }  
-      
-    if (verbose)  
-    {  
-        fprintf(stderr, "[%s] [DEBUG]: 解析请求: method=%s, path=%s, version=%s\n",  
-                timestamp(), method, path, version);  
-    }  
-  
-    if (strncmp(path, "/api", 4) == 0)  
-    {  
-        if (verbose)  
-        {  
-            fprintf(stderr, "[%s] [DEBUG]: 识别为 API 请求，转发到 handle_api_request()\n", timestamp());  
-        }  
-        handle_api_request(client_sock, path);  
-        return;  
-    }  
-  
-    if (strncmp(path, "/refresh", 8) == 0)  
-    {  
-        if (verbose)  
-        {  
-            fprintf(stderr, "[%s] [DEBUG]: 识别为 立即刷新 请求，转发到 handle_refresh_request()\n", timestamp());  
-        }  
-        handle_refresh_request(client_sock);  
-        return;  
-    }  
-  
-    if (strncmp(path, "/testmy?", 8) == 0)  
-    {  
-        if (verbose)  
-        {  
-            fprintf(stderr, "[%s] [DEBUG]: 识别为 测测我的 请求，转发到 handle_testmy_request()\n", timestamp());  
-        }  
-        handle_testmy_request(client_sock, path);  
-        return;  
-    }  
-  
-    if (verbose)  
-    {  
-        fprintf(stderr, "[%s] [DEBUG]: 识别为主页请求，使用缓存响应\n", timestamp());  
-    }  
-  
-    // ========== 使用缓存的 HTML ==========  
-    struct timeval lock_start, lock_acquired;      
-    gettimeofday(&lock_start, NULL);    
-    pthread_rwlock_rdlock(&g_cache_lock);    
-  
-    gettimeofday(&lock_acquired, NULL);      
-    double lock_wait_sec = (lock_acquired.tv_sec - lock_start.tv_sec) +       
-                   (lock_acquired.tv_usec - lock_start.tv_usec) / 1000000.0;      
-  
-    if (lock_wait_sec > 0.05 && verbose)      
-    {      
-        fprintf(stderr, "[%s] [WARN]: 当前访问主页需要等待缓存锁 %.3fs (可能正在更新主页缓存)\n",      
-            timestamp(), lock_wait_sec);      
-    }  
-  
-    if (g_html_cache && g_html_cache_size > 0)  
-    {  
-        if (verbose)  
-        {  
-            fprintf(stderr, "[%s] [DEBUG]: 使用缓存的 HTML (%zu 字节)\n",  
-                    timestamp(), g_html_cache_size);  
-        }  
-  
-        // 检测客户端是否支持 gzip  
-        char *accept_encoding = find_header_value(request, "Accept-Encoding");  
-        int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));  
-  
-        if (supports_gzip)  
-        {  
-            if (verbose)  
-            {  
-                fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());  
-            }  
-            send_compressed_response(client_sock, g_html_cache, g_html_cache_size);  
-        }  
-        else  
-        {  
-            if (verbose)  
-            {  
-                fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());  
-            }  
-            send_chunked_response(client_sock, g_html_cache, g_html_cache_size);  
-        }  
-  
-        pthread_rwlock_unlock(&g_cache_lock);  
-  
-        if (verbose)  
-        {  
-            fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n",  
-                    timestamp(), g_html_cache_size);  
-        }  
-    }  
-    else  
-    {  
-        pthread_rwlock_unlock(&g_cache_lock);  
-  
-        fprintf(stderr, "[%s] [WARN]: HTML 缓存未初始化,使用实时生成\n", timestamp());  
-  
-        // 动态生成代码作为后备  
-        pthread_rwlock_rdlock(&g_state.lock);  
-        size_t base_size = 50000;  
-        size_t per_host_size = 500 + (g_max_history * 50);  
-        size_t buffer_size = base_size + (g_state.host_count * per_host_size) + 10000;  
-  
-        if (buffer_size < 262144)  
-            buffer_size = 262144;  
-        if (buffer_size > 10485760)  
-            buffer_size = 10485760;  
-  
-        int host_count = g_state.host_count;  
-        pthread_rwlock_unlock(&g_state.lock);  
-  
-        char *response = malloc(buffer_size);  
-        if (response)  
-        {  
-            if (verbose)  
-            {  
-                fprintf(stderr, "[%s] [DEBUG]: 分配 %zu 字节缓冲区 (主机数: %d, 历史记录: %d)\n",  
-                        timestamp(), buffer_size, host_count, g_max_history);  
-            }  
-  
-            generate_html(response, buffer_size);  
-            size_t response_len = strlen(response);  
-  
-            char *accept_encoding = find_header_value(request, "Accept-Encoding");  
-            int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));  
-  
-            if (supports_gzip)  
-            {  
-                if (verbose)  
-                {  
-                    fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());  
-                }  
-                send_compressed_response(client_sock, response, response_len);  
-            }  
-            else  
-            {  
-                if (verbose)  
-                {  
-                    fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());  
-                }  
-                send_chunked_response(client_sock, response, response_len);  
-            }  
-  
-            if (verbose)  
-            {  
-                fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n", timestamp(), response_len);  
-            }  
-  
-            free(response);  
-        }  
-        else  
-        {  
-            if (verbose)  
-            {  
-                fprintf(stderr, "[%s] [ERROR]: 无法分配 %zu 字节缓冲区\n", timestamp(), buffer_size);  
-            }  
-        }  
-    }  
-  
-    close(client_sock);  
-    if (verbose)  
-    {  
-        fprintf(stderr, "[%s] [DEBUG]: HTTP 请求处理完成,连接已关闭\n", timestamp());  
-    }  
+void handle_http_request(int client_sock)
+{
+    if (verbose)
+    {
+        fprintf(stderr, "[%s] [DEBUG]: 开始处理 HTTP 请求 (socket fd=%d)\n", timestamp(), client_sock);
+    }
+
+    char request[8192] = {0}; // 增大缓冲区到 8KB
+    ssize_t total_received = 0;
+    int header_complete = 0;
+
+    // 设置接收超时(5秒)
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
+    // 循环接收直到获得完整的 HTTP 头部
+    while (total_received < (ssize_t)sizeof(request) - 1)
+    {
+        ssize_t n = recv(client_sock, request + total_received,
+                         sizeof(request) - total_received - 1, 0);
+
+        if (n > 0)
+        {
+            total_received += n;
+            request[total_received] = '\0';
+
+            // 检查是否收到完整的 HTTP 头部(以 \r\n\r\n 结束)
+            if (strstr(request, "\r\n\r\n") != NULL)
+            {
+                header_complete = 1;
+                break;
+            }
+        }
+        else if (n == 0)
+        {
+            // 客户端关闭连接
+            if (verbose)
+            {
+                fprintf(stderr, "[%s] [DEBUG]: 客户端在发送完整请求前关闭连接\n", timestamp());
+            }
+            close(client_sock);
+            return;
+        }
+        else
+        {
+            // 接收错误或超时
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                if (verbose)
+                {
+                    fprintf(stderr, "[%s] [WARN]: 接收 HTTP 请求超时(已接收 %zd 字节)\n",
+                            timestamp(), total_received);
+                }
+            }
+            else
+            {
+                if (verbose)
+                {
+                    fprintf(stderr, "[%s] [ERROR]: recv() 错误: %s\n", timestamp(), strerror(errno));
+                }
+            }
+            close(client_sock);
+            return;
+        }
+    }
+
+    if (!header_complete)
+    {
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [WARN]: HTTP 请求头部不完整,缓冲区已满\n", timestamp());
+        }
+        close(client_sock);
+        return;
+    }
+
+    if (verbose)
+    {
+        fprintf(stderr, "[%s] [DEBUG]: 接收到完整 HTTP 请求 (%zd 字节)\n", timestamp(), total_received);
+    }
+
+    // 查找代理请求头
+    char *xff = find_header_value(request, "X-Forwarded-For");
+    char *xri = find_header_value(request, "X-Real-IP");
+    char *cfip = find_header_value(request, "CF-Connecting-IP");
+
+    // 提取所有请求头的 IP 值
+    char xff_value[256] = {0};
+    char xri_value[256] = {0};
+    char cfip_value[256] = {0};
+
+    if (xff)
+    {
+        sscanf(xff, "%255[^\r\n]", xff_value);
+    }
+    if (xri)
+    {
+        sscanf(xri, "%255[^\r\n]", xri_value);
+    }
+    if (cfip)
+    {
+        sscanf(cfip, "%255[^\r\n]", cfip_value);
+    }
+
+    // 构建合并的消息
+    char proxy_info[2048] = {0};
+    int proxy_offset = 0;
+
+    if (xff || xri || cfip)
+    {
+        // 确定第一个非空的 IP 值
+        char *first_ip = NULL;
+        if (xff_value[0])
+            first_ip = xff_value;
+        else if (xri_value[0])
+            first_ip = xri_value;
+        else if (cfip_value[0])
+            first_ip = cfip_value;
+
+        // 检查是否所有非空值都相同
+        int all_same = 1;
+        if (first_ip)
+        {
+            if (xff_value[0] && strcmp(xff_value, first_ip) != 0)
+                all_same = 0;
+            if (xri_value[0] && strcmp(xri_value, first_ip) != 0)
+                all_same = 0;
+            if (cfip_value[0] && strcmp(cfip_value, first_ip) != 0)
+                all_same = 0;
+        }
+
+        if (all_same && first_ip)
+        {
+            // 所有 IP 相同,简化输出
+            proxy_offset += snprintf(proxy_info + proxy_offset,
+                                     sizeof(proxy_info) - proxy_offset,
+                                     "访问者IP: %s", first_ip);
+        }
+        else
+        {
+            // IP 不同,显示详细信息
+            proxy_offset += snprintf(proxy_info + proxy_offset,
+                                     sizeof(proxy_info) - proxy_offset,
+                                     "访问者IP: ");
+            int has_proxy_header = 0;
+
+            if (xff_value[0])
+            {
+                proxy_offset += snprintf(proxy_info + proxy_offset,
+                                         sizeof(proxy_info) - proxy_offset,
+                                         "X-Forwarded-For=%s", xff_value);
+                has_proxy_header = 1;
+            }
+
+            if (xri_value[0])
+            {
+                if (has_proxy_header)
+                    proxy_offset += snprintf(proxy_info + proxy_offset,
+                                             sizeof(proxy_info) - proxy_offset,
+                                             ", ");
+                proxy_offset += snprintf(proxy_info + proxy_offset,
+                                         sizeof(proxy_info) - proxy_offset,
+                                         "X-Real-IP=%s", xri_value);
+                has_proxy_header = 1;
+            }
+
+            if (cfip_value[0])
+            {
+                if (has_proxy_header)
+                    proxy_offset += snprintf(proxy_info + proxy_offset,
+                                             sizeof(proxy_info) - proxy_offset,
+                                             ", ");
+                proxy_offset += snprintf(proxy_info + proxy_offset,
+                                         sizeof(proxy_info) - proxy_offset,
+                                         "CF-Connecting-IP=%s", cfip_value);
+            }
+        }
+
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [DEBUG]: %s\n", timestamp(), proxy_info);
+        }
+    }
+
+    // 解析请求行: GET /api?supernode=host:port HTTP/1.1
+    char method[16], path[512], version[16];
+    if (sscanf(request, "%15s %511s %15s", method, path, version) != 3)
+    {
+        // 解析失败,返回 400 错误而不是继续处理
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [WARN]: 请求行解析失败,发送 400 错误\n", timestamp());
+        }
+
+        const char *error_response =
+            "HTTP/1.1 400 Bad Request\r\n"
+            "Content-Type: text/plain; charset=utf-8\r\n"
+            "Connection: close\r\n\r\n"
+            "Invalid HTTP request";
+        send(client_sock, error_response, strlen(error_response), 0);
+        close(client_sock);
+        return;
+    }
+
+    if (verbose)
+    {
+        fprintf(stderr, "[%s] [DEBUG]: 解析请求: method=%s, path=%s, version=%s\n",
+                timestamp(), method, path, version);
+    }
+
+    if (strncmp(path, "/api", 4) == 0)
+    {
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [DEBUG]: 识别为 API 请求，转发到 handle_api_request()\n", timestamp());
+        }
+        handle_api_request(client_sock, path);
+        return;
+    }
+
+    if (strncmp(path, "/refresh", 8) == 0)
+    {
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [DEBUG]: 识别为 立即刷新 请求，转发到 handle_refresh_request()\n", timestamp());
+        }
+        handle_refresh_request(client_sock);
+        return;
+    }
+
+    if (strncmp(path, "/testmy?", 8) == 0)
+    {
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [DEBUG]: 识别为 测测我的 请求，转发到 handle_testmy_request()\n", timestamp());
+        }
+        handle_testmy_request(client_sock, path);
+        return;
+    }
+
+    if (verbose)
+    {
+        fprintf(stderr, "[%s] [DEBUG]: 识别为主页请求，使用缓存响应\n", timestamp());
+    }
+
+    // ========== 使用缓存的 HTML ==========
+    struct timeval lock_start, lock_acquired;
+    gettimeofday(&lock_start, NULL);
+    pthread_rwlock_rdlock(&g_cache_lock);
+
+    gettimeofday(&lock_acquired, NULL);
+    double lock_wait_sec = (lock_acquired.tv_sec - lock_start.tv_sec) +
+                           (lock_acquired.tv_usec - lock_start.tv_usec) / 1000000.0;
+
+    if (lock_wait_sec > 0.05 && verbose)
+    {
+        fprintf(stderr, "[%s] [WARN]: 当前访问主页需要等待缓存锁 %.3fs (可能正在更新主页缓存)\n",
+                timestamp(), lock_wait_sec);
+    }
+
+    if (g_html_cache && g_html_cache_size > 0)
+    {
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [DEBUG]: 使用缓存的 HTML (%zu 字节)\n",
+                    timestamp(), g_html_cache_size);
+        }
+
+        // 检测客户端是否支持 gzip
+        char *accept_encoding = find_header_value(request, "Accept-Encoding");
+        int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));
+
+        if (supports_gzip)
+        {
+            if (verbose)
+            {
+                fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());
+            }
+            send_compressed_response(client_sock, g_html_cache, g_html_cache_size);
+        }
+        else
+        {
+            if (verbose)
+            {
+                fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());
+            }
+            send_chunked_response(client_sock, g_html_cache, g_html_cache_size);
+        }
+
+        pthread_rwlock_unlock(&g_cache_lock);
+
+        if (verbose)
+        {
+            fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n",
+                    timestamp(), g_html_cache_size);
+        }
+    }
+    else
+    {
+        pthread_rwlock_unlock(&g_cache_lock);
+
+        fprintf(stderr, "[%s] [WARN]: HTML 缓存未初始化,使用实时生成\n", timestamp());
+
+        // 动态生成代码作为后备
+        pthread_rwlock_rdlock(&g_state.lock);
+        size_t base_size = 50000;
+        size_t per_host_size = 500 + (g_max_history * 50);
+        size_t buffer_size = base_size + (g_state.host_count * per_host_size) + 10000;
+
+        if (buffer_size < 262144)
+            buffer_size = 262144;
+        if (buffer_size > 10485760)
+            buffer_size = 10485760;
+
+        int host_count = g_state.host_count;
+        pthread_rwlock_unlock(&g_state.lock);
+
+        char *response = malloc(buffer_size);
+        if (response)
+        {
+            if (verbose)
+            {
+                fprintf(stderr, "[%s] [DEBUG]: 分配 %zu 字节缓冲区 (主机数: %d, 历史记录: %d)\n",
+                        timestamp(), buffer_size, host_count, g_max_history);
+            }
+
+            generate_html(response, buffer_size);
+            size_t response_len = strlen(response);
+
+            char *accept_encoding = find_header_value(request, "Accept-Encoding");
+            int supports_gzip = (accept_encoding && strstr(accept_encoding, "gzip"));
+
+            if (supports_gzip)
+            {
+                if (verbose)
+                {
+                    fprintf(stderr, "[%s] [DEBUG]: 客户端支持 gzip，使用压缩传输\n", timestamp());
+                }
+                send_compressed_response(client_sock, response, response_len);
+            }
+            else
+            {
+                if (verbose)
+                {
+                    fprintf(stderr, "[%s] [DEBUG]: 客户端不支持 gzip，使用未压缩传输\n", timestamp());
+                }
+                send_chunked_response(client_sock, response, response_len);
+            }
+
+            if (verbose)
+            {
+                fprintf(stderr, "[%s] [DEBUG]: 响应发送完成: %zu 字节\n", timestamp(), response_len);
+            }
+
+            free(response);
+        }
+        else
+        {
+            if (verbose)
+            {
+                fprintf(stderr, "[%s] [ERROR]: 无法分配 %zu 字节缓冲区\n", timestamp(), buffer_size);
+            }
+        }
+    }
+
+    close(client_sock);
+    if (verbose)
+    {
+        fprintf(stderr, "[%s] [DEBUG]: HTTP 请求处理完成,连接已关闭\n", timestamp());
+    }
 }
 
 // 监控线程
@@ -5668,15 +5817,15 @@ static int calculate_min_interval(int host_count, int parallel_checks)
     return (min_interval_min < 1) ? 1 : min_interval_min;
 }
 
-// 线程处理函数  
-void *handle_client_thread(void *arg)  
-{  
-    int client_sock = *(int *)arg;  
-    free(arg);  
-      
-    handle_http_request(client_sock);  
-      
-    return NULL;  
+// 线程处理函数
+void *handle_client_thread(void *arg)
+{
+    int client_sock = *(int *)arg;
+    free(arg);
+
+    handle_http_request(client_sock);
+
+    return NULL;
 }
 
 // 打印帮助信息
@@ -6082,23 +6231,23 @@ int main(int argc, char *argv[])
                 timestamp(), cpu_cores, g_max_parallel_checks);
     }
 
-    // 设置 HTTP 工作线程数（与并行检测线程使用相同的逻辑）  
-    if (cpu_cores <= 2)  
-    {  
-        g_http_worker_threads = 3;  
-    }  
-    else if (cpu_cores <= 4)  
-    {  
-        g_http_worker_threads = cpu_cores;  
-    }  
-    else  
-    {  
-        g_http_worker_threads = (cpu_cores < 10) ? cpu_cores : 10;  
-    }  
+    // 设置 HTTP 工作线程数（与并行检测线程使用相同的逻辑）
+    if (cpu_cores <= 2)
+    {
+        g_http_worker_threads = 3;
+    }
+    else if (cpu_cores <= 4)
+    {
+        g_http_worker_threads = cpu_cores;
+    }
+    else
+    {
+        g_http_worker_threads = (cpu_cores < 10) ? cpu_cores : 10;
+    }
     if (verbose)
-    { 
-        fprintf(stderr, "[%s] [INFO]: 自动检测到 %d 个 CPU 核心，HTTP 服务将使用最多 %d 个并发线程\n",  
-            timestamp(), cpu_cores, g_http_worker_threads); 
+    {
+        fprintf(stderr, "[%s] [INFO]: 自动检测到 %d 个 CPU 核心，HTTP 服务将使用最多 %d 个并发线程\n",
+                timestamp(), cpu_cores, g_http_worker_threads);
     }
 
     // 注册信号处理函数
@@ -6467,66 +6616,66 @@ int main(int argc, char *argv[])
                 timestamp(), g_community, g_mac[0], g_mac[1], g_mac[2], g_mac[3], g_mac[4], g_mac[5]);
     }
     // 主循环处理 HTTP 请求
-    while (1)  
-    {  
-        struct sockaddr_storage client_addr;  
-        socklen_t client_len = sizeof(client_addr);  
-        int client_sock = accept(http_sock, (struct sockaddr *)&client_addr, &client_len);  
-  
-        if (client_sock >= 0)  
-        {  
-            if (verbose)  
-            {  
-                char client_ip[INET6_ADDRSTRLEN];  
-                if (client_addr.ss_family == AF_INET)  
-                {  
-                    inet_ntop(AF_INET, &((struct sockaddr_in *)&client_addr)->sin_addr,  
-                              client_ip, sizeof(client_ip));  
-                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);  
-                }  
-                else if (client_addr.ss_family == AF_INET6)  
-                {  
-                    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&client_addr)->sin6_addr,  
-                              client_ip, sizeof(client_ip));  
-                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);  
-                }  
-            }  
-              
-            // 为每个连接创建独立线程  
-            int *sock_ptr = malloc(sizeof(int));  
-            if (sock_ptr)  
-            {  
-                *sock_ptr = client_sock;  
-                  
-                pthread_t client_thread;  
-                pthread_attr_t attr;  
-                pthread_attr_init(&attr);  
-                pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);  
-                  
-                if (pthread_create(&client_thread, &attr, handle_client_thread, sock_ptr) != 0)  
-                {  
-                    fprintf(stderr, "[%s] [ERROR]: 无法创建 HTTP 处理线程: %s\n",   
-                            timestamp(), strerror(errno));  
-                    free(sock_ptr);  
-                    handle_http_request(client_sock);  // 回退到同步处理  
-                }  
-                  
-                pthread_attr_destroy(&attr);  
-            }  
-            else  
-            {  
-                fprintf(stderr, "[%s] [ERROR]: 内存分配失败\n", timestamp());  
-                handle_http_request(client_sock);  
-            }  
-        }  
-        else if (errno != EINTR)  
-        {  
-            if (verbose)  
-            {  
-                fprintf(stderr, "[%s] [ERROR]: accept() 错误: %s\n", timestamp(), strerror(errno));  
-            }  
-        }  
-    }  
-      
-    return 0;  
+    while (1)
+    {
+        struct sockaddr_storage client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int client_sock = accept(http_sock, (struct sockaddr *)&client_addr, &client_len);
+
+        if (client_sock >= 0)
+        {
+            if (verbose)
+            {
+                char client_ip[INET6_ADDRSTRLEN];
+                if (client_addr.ss_family == AF_INET)
+                {
+                    inet_ntop(AF_INET, &((struct sockaddr_in *)&client_addr)->sin_addr,
+                              client_ip, sizeof(client_ip));
+                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
+                }
+                else if (client_addr.ss_family == AF_INET6)
+                {
+                    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&client_addr)->sin6_addr,
+                              client_ip, sizeof(client_ip));
+                    fprintf(stderr, "[%s] [DEBUG]: 来自 [%s] 访问\n", timestamp(), client_ip);
+                }
+            }
+
+            // 为每个连接创建独立线程
+            int *sock_ptr = malloc(sizeof(int));
+            if (sock_ptr)
+            {
+                *sock_ptr = client_sock;
+
+                pthread_t client_thread;
+                pthread_attr_t attr;
+                pthread_attr_init(&attr);
+                pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+                if (pthread_create(&client_thread, &attr, handle_client_thread, sock_ptr) != 0)
+                {
+                    fprintf(stderr, "[%s] [ERROR]: 无法创建 HTTP 处理线程: %s\n",
+                            timestamp(), strerror(errno));
+                    free(sock_ptr);
+                    handle_http_request(client_sock); // 回退到同步处理
+                }
+
+                pthread_attr_destroy(&attr);
+            }
+            else
+            {
+                fprintf(stderr, "[%s] [ERROR]: 内存分配失败\n", timestamp());
+                handle_http_request(client_sock);
+            }
+        }
+        else if (errno != EINTR)
+        {
+            if (verbose)
+            {
+                fprintf(stderr, "[%s] [ERROR]: accept() 错误: %s\n", timestamp(), strerror(errno));
+            }
+        }
+    }
+
+    return 0;
 }
