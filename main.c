@@ -3211,6 +3211,27 @@ void generate_html(char *buf, size_t bufsize)
                        "      resultDiv.innerHTML = '<div style=\"color:var(--danger);text-align:center;padding:20px;\">检测失败,请稍后重试</div>';\n"
                        "    });\n"
                        "}\n"
+                       "function formatRelativeTime(timestamp) {\n"  
+                       "  var now = Math.floor(Date.now() / 1000);\n"  
+                       "  var elapsed = now - timestamp;\n"  
+                       "  if (elapsed < 0) elapsed = 0;\n"  
+                       "  if (elapsed < 5) return '刚刚';\n"  
+                       "  if (elapsed < 60) return elapsed + '秒前';\n"  
+                       "  if (elapsed < 3600) return Math.floor(elapsed / 60) + '分钟前';\n"  
+                       "  if (elapsed < 86400) return Math.floor(elapsed / 3600) + '小时前';\n"  
+                       "  var date = new Date(timestamp * 1000);\n"  
+                       "  return (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + \n"  
+                       "         date.getHours() + ':' + String(date.getMinutes()).padStart(2, '0');\n"  
+                       "}\n"  
+                       "function updateRelativeTimes() {\n"  
+                       "  var elements = document.querySelectorAll('.relative-time');\n"  
+                       "  elements.forEach(function(el) {\n"  
+                       "    var timestamp = parseInt(el.getAttribute('data-timestamp'));\n"  
+                       "    if (timestamp > 0) {\n"  
+                       "      el.textContent = formatRelativeTime(timestamp);\n"  
+                       "    }\n"  
+                       "  });\n"  
+                       "}\n"
                        "document.addEventListener('keydown', function(e) {\n"
                        "  if (e.key === 'Escape') closeHistoryModal();\n"
                        "});\n"
@@ -3218,6 +3239,10 @@ void generate_html(char *buf, size_t bufsize)
                        "document.addEventListener('DOMContentLoaded', function(){\n"
                        "  // 初始化：更新顶部通知（页面生成的表格会包含状态类名）\n"
                        "  updateTopNotice();\n"
+                       "  // 初始化相对时间显示\n"  
+                       "  updateRelativeTimes();\n" 
+                       "  // 每秒更新一次相对时间\n"  
+                       "  setInterval(updateRelativeTimes, 1000);\n"
                        "  // 为所有进度条添加动画初始宽度（让其从0动画到目标值）\n"
                        "  var bars = document.querySelectorAll('.progress-bar');\n"
                        "  bars.forEach(function(bar){ var w = bar.getAttribute('data-target') || bar.style.width; bar.style.width = '0%%'; setTimeout(function(){ bar.style.width = w; }, 80); });\n"
@@ -3371,32 +3396,14 @@ void generate_html(char *buf, size_t bufsize)
             // 计算该主机的连通率(基于历史记录)
             float overall_rate = calculate_uptime(h);
 
-            // 转换最后检测时间
-            char last_check_str[128] = "正在检测";
-            if (h->last_check > 0)
-            {
-                time_t elapsed = now - h->last_check;
-                if (elapsed < 5)
-                {
-                    snprintf(last_check_str, sizeof(last_check_str), "刚刚");
-                }
-                else if (elapsed < 60)
-                {
-                    snprintf(last_check_str, sizeof(last_check_str), TIME_FMT "秒前", TIME_CAST(elapsed));
-                }
-                else if (elapsed < 3600)
-                {
-                    snprintf(last_check_str, sizeof(last_check_str), TIME_FMT "分钟前", TIME_CAST(elapsed / 60));
-                }
-                else if (elapsed < 86400)
-                {
-                    snprintf(last_check_str, sizeof(last_check_str), TIME_FMT "小时前", TIME_CAST(elapsed / 3600));
-                }
-                else
-                {
-                    struct tm *last_tm = localtime(&h->last_check);
-                    strftime(last_check_str, sizeof(last_check_str), "%m月%d日 %H:%M", last_tm);
-                }
+            // 转换最后检测时间 - 嵌入时间戳供客户端实时更新  
+            char last_check_str[256] = "正在检测";  
+            if (h->last_check > 0)  
+            {  
+                // 直接输出时间戳,让 JavaScript 处理实时更新  
+                snprintf(last_check_str, sizeof(last_check_str),   
+                     "<span class='relative-time' data-timestamp='" TIME_FMT "'>计算中...</span>",  
+                     TIME_CAST(h->last_check));  
             }
 
             // 确定状态 - 直接使用 last_status（保留原始数据结构与行为）
