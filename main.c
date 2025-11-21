@@ -3239,6 +3239,7 @@ void generate_html(char *buf, size_t bufsize)
                        "document.addEventListener('DOMContentLoaded', function(){\n"
                        "  // 初始化：更新顶部通知（页面生成的表格会包含状态类名）\n"
                        "  updateTopNotice();\n"
+                       "  filterTable();\n"
                        "  // 初始化相对时间显示\n"  
                        "  updateRelativeTimes();\n" 
                        "  // 每秒更新一次相对时间\n"  
