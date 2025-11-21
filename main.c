@@ -3263,9 +3263,6 @@ void generate_html(char *buf, size_t bufsize)
                        "<div class='stats'>\n"
                        "</div>\n"
                        "</header>\n"
-                       "\n"
-                       "<div id='topNotice' class='top-notice card'></div>\n"
-                       "\n"
                        "<div class='card'>\n"
                        "<div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'>\n"
                        "<div style='display:flex;gap:12px;flex-wrap:wrap;'>\n" // 左侧容器
@@ -3565,6 +3562,8 @@ void generate_html(char *buf, size_t bufsize)
                     "</tbody>\n"
                     "</table>\n"
                     "</div>\n"
+                    "\n"
+                    "<div id='topNotice' class='top-notice card' style='margin-top:14px'></div>\n"
                     "\n"
                     "<div class='footer'>\n"
                     "© 2025 N2N Supernode Monitor · <a href='http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=GLULTq6IK_44qF_CAOSc4PqVLE_LMA6Y&authKey=KQ4hIgPoUa25xQF%%2FtFCNi%%2BuF31wob9vISoCpoOainpJ%%2Beo1AxRi%%2FZWmIImJbIZoH&noverify=0&group_code=196588661' target='_blank' rel='noopener noreferrer'>加入QQ群</a>\n"
