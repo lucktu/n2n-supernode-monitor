@@ -3293,7 +3293,7 @@ void generate_html(char *buf, size_t bufsize)
                        "<select id='versionFilter' onchange='filterTable()'>\n"
                        "<option value='all'>全部</option>\n"
                        "<option value='v1'>v1</option>\n"
-                       "<option value='v2'>v2</option>\n"
+                       "<option value='v2' selected>v2</option>\n"
                        "<option value='v2s'>v2s</option>\n"
                        "<option value='v3'>v3</option>\n"
                        "<option value='未知'>未知</option>\n"
