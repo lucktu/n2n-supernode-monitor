@@ -472,7 +472,7 @@ static int is_valid_v1_ack(const uint8_t *buf, size_t len)
 
 static int is_valid_v2_ack(const uint8_t *buf, size_t len, const uint8_t *expected_cookie)
 {
-    if (len < 28)
+    if (len < 24)
         return 0;
 
     uint16_t flags_pc = (buf[2] << 8) | buf[3];
@@ -480,7 +480,7 @@ static int is_valid_v2_ack(const uint8_t *buf, size_t len, const uint8_t *expect
     if (pc != 6)
         return 0;
 
-    const uint8_t *received_cookie = buf + 24;
+    const uint8_t *received_cookie = buf + 20;
     int cookie_match = memcmp(received_cookie, expected_cookie, N2N_COOKIE_SIZE) == 0;
     if (verbose)
     {
