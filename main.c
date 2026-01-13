@@ -390,7 +390,7 @@ static size_t build_register_super_v2(uint8_t *pktbuf, const char *community, ui
     sent_cookie[3] = 0xDD;
 
     memcpy(mac, g_mac, N2N_MAC_SIZE);
-    encode_common(pktbuf, &idx, 2, 2, 0, MSG_TYPE_REGISTER_SUPER, community, N2N_COMMUNITY_SIZE);
+    encode_common(pktbuf, &idx, 2, 2, 0, MSG_TYPE_REGISTER_SUPER, community, COMMUNITY_LEN);
     encode_buf(pktbuf, &idx, sent_cookie, N2N_COOKIE_SIZE);
     encode_buf(pktbuf, &idx, mac, N2N_MAC_SIZE);
     encode_uint32(pktbuf, &idx, 0);
